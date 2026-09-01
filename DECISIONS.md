@@ -1,0 +1,77 @@
+# 결정 기록 (DECISIONS) — breakZoneAutoApp
+
+> 프로젝트의 모든 **주요 결정과 근거**를 남기는 로그(ADR 형식: 배경 → 선택지 → 결정 → 근거 → 영향).
+> 새 세션이 "왜 이렇게 되어 있나"를 5분 안에 이해하도록. 결정을 바꾸면 **새 항목으로 추가**(기존 항목은 남기고 "대체됨" 표기).
+
+## 요약 표
+
+| # | 결정 | 날짜 | 상태 |
+|---|---|---|---|
+| D-001 | 증권사 = 키움 REST API (모의부터) | 설계기 | ✅ 확정 |
+| D-002 | 앱 = Flutter | 설계기 | ✅ 확정 |
+| D-003 | 중계/백엔드 = Supabase 단독 | 설계기 | ✅ 확정 |
+| D-004 | 봇 = Python 3.11+ / 백그라운드 푸시 1단계 제외 | 설계기 | ✅ 확정 |
+| D-005 | 현재가 소스 = 키움 실시간 WS(폴백 네이버), 과거종가 pykrx | 2026-08-31 | ✅ 확정 |
+| D-006 | 키움 MCP = 개발 보조. 봇 매매경로는 REST/WS 직접 | 2026-09-01 | ✅ 확정 |
+| D-007 | Phase 2 브로커 구현 방식 (자체 vs kiwoom-client) | 2026-09-01 | ⏳ 보류 |
+| D-008 | 자동매매 조건은 Phase 4 확정 + 앱 조절 | 2026-09-01 | ⏳ 예정 |
+| D-009 | 문서 관리 체계 = PROGRESS + DECISIONS | 2026-09-01 | ✅ 확정 |
+| D-010 | Python 3.12 설치(3.11+ 요건 충족) | 2026-09-01 | ✅ 확정 |
+
+---
+
+## D-001 · 증권사 = 키움 REST API (모의투자부터)
+- **배경:** 개인 자동매매를 위한 증권사 API 필요. 사용자는 평소 미래에셋 MTS 사용.
+- **선택지:** 미래에셋(개인 자동매매 오픈API 미제공) / 한국투자증권 KIS / **키움 REST**.
+- **결정:** 키움 REST API. **모의투자부터** 시작.
+- **근거:** 키움 REST는 OAuth 토큰·국내주식 주문·모의투자·WebSocket 실시간 지원, OCX 불필요(리눅스/클라우드 이관 용이), 공식 SDK 존재. 미래에셋은 개인 자동매매 API 미제공.
+- **영향:** 봇은 키움 계좌에서 거래(미래에셋 MTS로는 봇 포지션 안 보임). 실전 전환 시 키움 계좌+API 신청 필요. 상세: [docs/01](docs/01-broker-kiwoom.md).
+
+## D-002 · 앱 = Flutter
+- **결정:** Flutter(Android 우선, iOS 확장 가능), Riverpod 상태관리, supabase_flutter.
+- **근거:** 단일 코드베이스, Supabase 라이브러리 성숙. 상세: [docs/04](docs/04-flutter-app.md).
+
+## D-003 · 중계/백엔드 = Supabase 단독
+- **결정:** Supabase(Postgres + Realtime + Auth) **단독**. 다른 백엔드(Firebase 등) 상시 운영 안 함.
+- **근거:** 봇·앱의 유일 접점. 무료 티어로 시작. Realtime으로 인앱 실시간 충분. 상세: [docs/02](docs/02-supabase-schema.md).
+
+## D-004 · 봇 = Python 3.11+ / 백그라운드 푸시 1단계 제외
+- **결정:** 봇 언어 Python 3.11+(breakZone 재사용). 백그라운드 푸시(FCM/Firebase)는 1단계 제외, Phase 5-B에서 채택 결정.
+- **근거:** breakZone 분석 로직이 Python. 앱 열려 있을 때 알림은 Supabase Realtime으로 충분. 잠금화면/종료 알림이 필요할 때만 FCM 추가.
+
+## D-005 · 현재가 소스 = 키움 실시간 WS (폴백 네이버), 과거종가 = pykrx
+- **배경:** breakZone은 현재가를 네이버 크롤링으로 가져옴. 자동매매는 주문 직전 실시간 시세가 필수.
+- **결정:** **현재가 = 키움 실시간 WebSocket**(폴백: 네이버). **해제금액 계산용 과거종가(T-5/T-15) = pykrx 유지**(변경 없음). 경고주 목록 = KIND 유지.
+- **근거:** 네이버 크롤링은 느리고 불안정 → 매매 트리거·가격 sanity에 부적합. 키움 WS는 틱 단위 실시간. 과거종가 계산 로직은 그대로라 calculator.py 무변경.
+- **영향:** Phase 1까지는 네이버 이식본으로 분석 검증, Phase 2에서 브로커 어댑터가 붙으면 현재가 소스만 교체. 상세: [docs/03](docs/03-strategy-spec.md) §1.3.
+
+## D-006 · 키움 "MCP 서버" = 개발 보조. 봇 매매경로는 REST/WS 직접 호출
+- **배경:** 사용자가 2026-08-27 무렵 키움 "REST API MCP" 등장을 언급. 조사 결과 공식 저장소([Kiwoom-Securities/Kiwoom-REST-API](https://github.com/Kiwoom-Securities/Kiwoom-REST-API))에 MCP 서버(`mcp_exec/`,`mcp_spec/`) 추가됨. 커뮤니티 MCP들([java-jaydev/kiwoom-mcp](https://github.com/java-jaydev/kiwoom-mcp) 등)은 대부분 **조회 전용**.
+- **결정:** MCP 서버는 **개발 보조 도구**로만 사용(Claude가 API를 대화로 조회·스펙 실측). **봇(engine)의 매매 경로는 MCP를 거치지 않고 키움 REST/WebSocket을 직접(또는 Python 래퍼로) 호출**한다.
+- **근거:** MCP는 LLM 에이전트용 인터페이스 — 24시간 프로그램 매매에 부적합(레이턴시·안정성·주문 미지원). 봇은 결정론적 코드 경로 필요.
+- **부가 이점:** 공식 저장소가 337개 API 스펙 + Postman(306) + `kiwoomcli` + 주문 예제 + 모의 지원 포함 → docs/01 스펙 실측의 **권위 원본**으로 활용. 이전엔 "공식 문서 뒤져 빈칸 채우기"였던 Phase 0 실측이 쉬워짐.
+
+## D-007 · Phase 2 브로커 구현: 자체구현 vs kiwoom-client 래핑 ⏳ 보류
+- **배경:** `KiwoomRestBroker`(docs/01)를 밑바닥부터 짤지, 기존 Python 래퍼를 쓸지.
+- **선택지:**
+  - (A) **자체구현** — 토큰매니저·주문·WebSocket·레이트리밋·재시도를 직접. 완전한 통제, 의존성 최소.
+  - (B) **`kiwoom-client` 래핑**([younghwan91/kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)) — 주문/잔고/WS/토큰자동갱신/async/`is_mock` 이미 구현, MIT. 단 **스타 0(검증 안 됨)**.
+  - (C) **키움 공식 클라이언트/`kiwoomcli`** 참조·부분 재사용.
+- **잠정 방향:** `BrokerAdapter` 추상화 덕에 어느 쪽이든 전략 코드는 무변경. (B)를 우리 어댑터 안에 감싸면 Phase 2 공수 절감 가능하나, **저품질/미검증 라이브러리 의존 리스크** 존재. **Phase 2 착수 시 공식 저장소 실측 후 결정.**
+- **상태:** 보류. Phase 2에서 확정.
+
+## D-008 · 자동매매 "조건"은 Phase 4에서 확정 + 앱에서 수치 조절 ⏳ 예정
+- **배경:** 사용자 목표 = "내가 지정한 특정 조건(여러 항목 조합)에 자동매수/매도, 수치는 앱에서 조절". breakZone은 분석/모니터링만 했고 **매매 트리거는 정의된 적 없음**.
+- **결정:** 진입/청산 조건의 **구체 항목·임계값은 Phase 4에서 Claude가 후보 항목 메뉴 제시 → 사용자가 조합·확정**. 수치는 `settings` 테이블에 저장하고 **앱 화면에서 조절**(Phase 5). 최종 수치는 Phase 6 백테스트/모의운용으로 튜닝.
+- **근거:** 임계값을 감으로 하드코딩 금지(ROADMAP 원칙). 우선 골격(파라미터화된 규칙 함수)만 만들고 값은 데이터로 결정.
+- **상태:** 예정(Phase 4). 지금 조건을 확정할 필요 없음.
+
+## D-009 · 문서 관리 체계 = PROGRESS + DECISIONS
+- **배경:** 사용자는 로드맵 Phase 단위로 **세션을 나눠** 작업. 새 세션이 이전 진행/결정을 즉시 파악해야 함.
+- **결정:** [PROGRESS.md](PROGRESS.md)(진입점: 현재상태·다음할일·세션로그) + [DECISIONS.md](DECISIONS.md)(결정·근거) 운영. CLAUDE.md가 새 세션을 PROGRESS로 유도. 매 세션 끝에 갱신(PROGRESS §세션종료 규칙).
+- **근거:** 세션 간 컨텍스트 유실 방지. 결정과 진행을 분리해 각각 추적 가능.
+
+## D-010 · Python 3.12 설치
+- **결정:** Python 3.12.10 설치(ROADMAP "3.11+" 요건 충족).
+- **근거:** 3.12는 안정 버전이며 pykrx/finance-datareader/supabase-py 등 주요 라이브러리 호환. winget 사용자 범위 설치로 관리자 권한 불필요, PATH 자동 등록.
+- **영향:** 새 터미널에서 `python` 사용 가능(기존 MS Store 스텁보다 PATH 우선).
