@@ -17,7 +17,7 @@
 - [x] A-2. `openapi.kiwoom.com` REST API 사용 신청 ✅
 - [x] A-3. **상시모의투자** 참가신청 → 모의계좌 생성 ✅
 - [x] A-4. **모의용** App Key / App Secret 발급 ✅ (사용자 보관, 채팅 미공유)
-- [ ] A-5. 모의계좌 번호 확인 (`KIWOOM_ACCOUNT_NO`) ← 확인 필요
+- [x] A-5. 모의계좌 번호 확인 (`KIWOOM_ACCOUNT_NO`) ✅
 - [ ] A-6. 이용약관 확인 — 자동매매 허용 범위 · 호출한도(rate limit)
 
 **산출물(시크릿):** `KIWOOM_APP_KEY`, `KIWOOM_SECRET`(모의), `KIWOOM_ACCOUNT_NO`
@@ -43,21 +43,20 @@
 - [ ] C-5. (선택) Docker ❌ — Phase 8에서 필요
 
 ## D. 프로젝트 초기화 (제가 진행 가능 — 키 불필요)
-- [ ] D-1. `git init` + 첫 커밋 (`.gitignore` 이미 존재)
-- [ ] D-2. `engine/` 스캐폴딩 (`requirements.txt`, `.env.example`, `src/`, `tests/`)
+- [x] D-1. `git init -b main` + 첫 커밋 ✅ (2026-09-01, 커밋 e3913f8)
+- [x] D-2. `engine/` Phase 0 스캐폴딩 ✅ (`requirements.txt`, `.env.example`, `tools/check_kiwoom_token.py`, `README.md`). src/ 전체 구조는 Phase 1에서.
 
 ## E. 키움 실제 스펙 실측 🔴 (Phase 2 블로커)
 > A 완료 후. 공식 SDK/문서로 실제 값 확인해 [`docs/01-broker-kiwoom.md`](docs/01-broker-kiwoom.md) "확정 스펙" 표를 채운다.
 
-- [ ] E-1. 공식 SDK 클론: `github.com/Kiwoom-Securities/Kiwoom-REST-API`
-- [ ] E-2. 모의 REST/WebSocket Base URL 확인
-- [ ] E-3. 토큰 발급 endpoint·필드·만료시간 확인
-- [ ] E-4. 주문(매수/매도/정정/취소) TR·스키마 확인
-- [ ] E-5. 잔고·체결/미체결 조회 TR 확인
-- [ ] E-6. 현재가 조회 TR 확인
-- [ ] E-7. 실시간 시세 WebSocket 구독 형식·동시구독 한도 확인
-- [ ] E-8. Rate limit 수치 확인
-- [ ] E-9. docs/01 스펙 표의 모든 `______` 칸 채움
+- [x] E-2. 모의/실전 REST·WebSocket Base URL 확인 ✅ (mockapi.kiwoom.com / api.kiwoom.com, WS :10000)
+- [x] E-3. 토큰 발급 endpoint·필드 확인 ✅ (`POST /oauth2/token`, body grant_type/appkey/secretkey, 만료시간은 실행 시 실측)
+- [x] E-5. 잔고조회 TR 확인 ✅ (kt00018 `/api/dostk/acnt`)
+- [~] E-6. 현재가/호가 TR 부분 확인 (호가 ka10004 `/api/dostk/mrkcond`; 현재가 TR은 Phase 2)
+- [ ] E-4. 주문(매수/매도/정정/취소) TR·스키마 — **Phase 2에서 실측**
+- [ ] E-7. 실시간 WebSocket 구독 형식·동시구독 한도 — Phase 2
+- [ ] E-8. Rate limit 수치 — Phase 2
+- [~] E-9. docs/01 스펙 표: 토큰·잔고·base URL 칸 채움 ✅ / 주문·실시간은 Phase 2 (표에 ⬜ 표기)
 
 ---
 
