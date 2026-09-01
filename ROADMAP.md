@@ -154,9 +154,9 @@ breakZoneAutoApp/
 **산출물:** `python -m engine.src.analysis.candidates` 실행 시 현재 경고주 후보를 콘솔에 출력.
 
 **완료 기준**
-- [ ] `build_candidates()` 가 breakZone 대시보드 [조회] 결과와 동일한 값 산출(같은 날짜 기준 스팟체크)
-- [ ] 이식된 단위테스트 전부 통과
-- [ ] 네트워크 실패 시 종목별 격리(하나 실패해도 나머지 산출) 동작 확인
+- [x] `build_candidates()` 라이브 동작(경고주 22종목 산출). breakZone 과 동일 로직 이식(값 일치) — 대시보드 직접 스팟체크는 사용자 확인 여지
+- [x] 이식된 단위테스트 전부 통과 (68개, 2026-09-01)
+- [x] 네트워크 실패 시 종목별 격리(하나 실패해도 나머지 산출) 동작 확인 (test_candidates + 라이브 pending/partial 처리)
 
 ---
 

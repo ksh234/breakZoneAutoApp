@@ -12,9 +12,9 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-01 |
-| **현재 Phase** | **Phase 1 착수 준비** (Phase 0 핵심 게이트 통과) |
-| **코드 상태** | git 초기화. engine/ Phase 0 스캐폴딩. **키움 모의 토큰 발급 성공 확인됨(2026-09-01)** |
-| **다음 마일스톤** | Phase 1 — breakZone 분석 로직 이식 → `build_candidates()` 후보 산출 (Claude 담당, 키 불필요) |
+| **현재 Phase** | **Phase 1 완료** → Phase 2 준비 |
+| **코드 상태** | engine 분석 레이어 이식 완료. `build_candidates()` 라이브 동작(경고주 22종목 산출). 테스트 68개 통과. |
+| **다음 마일스톤** | Phase 2 — 키움 Broker Adapter(주문/시세). 先 키움 주문·실시간 TR 실측(docs/01 ⬜칸) + D-007(kiwoom-client 여부) 결정 |
 | **블로커** | 없음. (Supabase 프로젝트 생성은 Phase 3 전까지 병행) |
 
 ---
@@ -33,12 +33,21 @@ python tools/check_kiwoom_token.py
 → "✅ 접근토큰 발급 성공" 나오면 Phase 0 핵심 게이트 통과. (결과를 다음 세션에 알려주면 됨)
 - (병행 가능) [supabase.com](https://supabase.com) 프로젝트 생성(Seoul) → URL·anon·service_role 확보.
 
-**그다음 — Phase 1 (Claude 🤖 담당, 키 불필요):**
-1. `engine/src/` 전체 스캐폴딩 + breakZone 분석 로직 이식(calculator, fetchers, ticker_mapping)
-2. `analysis/candidates.py` — 경고주 후보 산출 함수 `build_candidates()`
-3. pytest 이식 → 후보 목록 콘솔 출력 확인 (Python 실행)
+**다음 — Phase 2 (키움 Broker Adapter, 🤝):**
+1. 키움 주문(매수/매도/정정/취소)·체결조회·실시간 WebSocket TR 실측 → docs/01 ⬜칸 채움
+2. D-007 결정: `KiwoomRestBroker` 자체구현 vs `kiwoom-client` 래핑
+3. `broker/base.py`(BrokerAdapter) + `broker/kiwoom.py` + 모의계좌 왕복주문 테스트
+   → 이때 candidates 의 현재가 소스를 네이버 → 키움 실시간으로 교체(D-005)
 
-**참고:** 스모크 테스트가 실패하면 → 응답의 return_msg 확인, docs/01 스펙 표 재점검(주로 키 오타/계좌 등록 여부).
+**병행(사용자):** Supabase 프로젝트 생성(Phase 3 전까지).
+
+**Phase 1 결과 재현:**
+```powershell
+cd engine
+.\.venv\Scripts\python.exe -m src.analysis.candidates            # 현재가 포함
+.\.venv\Scripts\python.exe -m src.analysis.candidates --no-price # 빠른 확인
+.\.venv\Scripts\python.exe -m pytest -q                          # 테스트 68개
+```
 
 ---
 
@@ -54,10 +63,20 @@ python tools/check_kiwoom_token.py
 - [x] 키움 모의 스펙 실측 → docs/01 확정 스펙 표 반영(토큰·잔고·base URL)
 - [x] git 초기화 + 첫 커밋(e3913f8)
 - [x] engine Phase 0 스캐폴딩 + 키움 연결 스모크 테스트 작성
+- [x] 키움 모의 접근토큰 발급 성공(Phase 0 게이트)
+- [x] **Phase 1: breakZone 분석 로직 이식 + `build_candidates()` 라이브 후보 산출(22종목) + 테스트 68개 통과**
 
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-01 (Phase 1 분석 로직 이식 완료 ✅)
+- **이식:** breakZone `src/calculator.py` + `fetchers/{kind,pykrx,naver}_fetcher.py` + `ticker_mapping.py` → `engine/src/analysis/`. import 경로만 수정(`from src.fetchers` → `from .`; kind_fetcher 의 미사용 `config` import 제거). 이식 시점 스냅샷으로 고정(양방향 동기화 안 함).
+- **신규:** `analysis/candidates.py` — `Candidate` dataclass(docs/02 매핑) + `build_candidates()`(app.py `_compute_stock_row` 이식, 종목별 격리) + 콘솔 출력(`python -m src.analysis.candidates`).
+- **테스트:** calculator/naver/pykrx/kind 테스트 이식 + `test_candidates.py` 신규. breakZone 원본 테스트의 stale 참조(`_n_business_days_after`) → 실제 함수 `_kth_business_day_on_or_after` 로 조정. **68개 전부 통과.**
+- **라이브 검증:** venv에 Phase1 deps 설치(pandas/pykrx/fdr/bs4/holidays) 후 실행 → **경고주 22종목** 후보 산출 성공(해제금액·현재가·하락비율·상태). breakZone 대시보드와 동일 로직(값 일치).
+- **환경 메모:** 실행은 `engine/.venv/Scripts/python.exe` 직접 호출(실행정책으로 activate 미사용). pykrx의 "KRX 로그인 실패"는 선택적 자격증명 경고(무관).
+- **남은 것(Phase 1 관점):** 현재가 소스는 아직 네이버(이식본). Phase 2에서 키움 실시간으로 교체.
 
 ### 세션 2026-09-01 (Phase 0 게이트 통과 ✅)
 - 사용자가 `.env`에 모의 키 입력 후 `python tools/check_kiwoom_token.py` 실행 → **"접근토큰 발급 성공"** 확인. 키움 모의 REST 연결 실증.

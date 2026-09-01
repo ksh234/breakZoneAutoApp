@@ -1,16 +1,19 @@
-# ── Phase 0 (지금: 키움 연결 스모크 테스트) ──
+# ── 실행 의존성 ──
 requests>=2.31
 python-dotenv>=1.0
 
-# ── Phase 1 (분석 로직 이식 시 추가 예정) ──
-# beautifulsoup4>=4.12
-# pykrx>=1.0.45
-# finance-datareader>=0.9.50
-# holidays>=0.40
-# pandas>=2.0
+# Phase 1: 분석 로직 이식 (KIND/pykrx/네이버)
+beautifulsoup4>=4.12
+pykrx>=1.0.45
+finance-datareader>=0.9.50
+holidays>=0.40
+pandas>=2.0
 
 # ── Phase 2~ (브로커/실시간) ──
 # websockets>=12.0        # 키움 실시간 시세 WebSocket
 
 # ── Phase 3~ (Supabase 중계) ──
 # supabase>=2.4
+
+# ── 개발/테스트 ──
+pytest>=8.0

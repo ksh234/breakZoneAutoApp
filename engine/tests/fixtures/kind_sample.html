@@ -1,0 +1,46 @@
+<!-- 실제 KIND 투자경고 탭(menuIndex=2) AJAX 응답 HTML 구조 (2026-04-16 확인).
+     컬럼: [번호, 종목명, 공시일, 지정일, 해제조건충족여부] — 유형 컬럼 없음 (탭 자체가 투자경고) -->
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>sample</title></head>
+<body>
+<table class="list type-00 mt5" summary="번호, 종목명, 공시일, 지정일">
+  <thead>
+    <tr>
+      <th>번호</th><th>종목</th><th>공시일</th><th>지정일</th><th>해제조건</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="first txc" scope="row">35</td>
+      <td title="SK텔레콤">
+        <img alt="유가증권" class="vmiddle legend" src="/images/common/icn_t_yu.gif"/>
+        <a href="#companysum" onclick="companysummary_open('00151'); return false;" title="SK텔레콤"> SK텔레콤</a>
+      </td>
+      <td class="txc">2026-03-24</td>
+      <td class="txc">2026-03-25</td>
+      <td class="txc">-</td>
+    </tr>
+    <tr>
+      <td class="first txc" scope="row">34</td>
+      <td title="삼성전자">
+        <img alt="유가증권" class="vmiddle legend" src="/images/common/icn_t_yu.gif"/>
+        <a href="#companysum" onclick="companysummary_open('00126'); return false;" title="삼성전자"> 삼성전자</a>
+      </td>
+      <td class="txc">2026-04-02</td>
+      <td class="txc">2026-04-03</td>
+      <td class="txc">-</td>
+    </tr>
+    <tr>
+      <td class="first txc" scope="row">33</td>
+      <td title="네이버">
+        <a href="#companysum" onclick="companysummary_open('00554'); return false;" title="네이버"> 네이버</a>
+      </td>
+      <td class="txc">2026/04/14</td>
+      <td class="txc">2026/04/15</td>
+      <td class="txc">-</td>
+    </tr>
+  </tbody>
+</table>
+</body>
+</html>
