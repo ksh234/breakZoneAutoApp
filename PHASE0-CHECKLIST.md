@@ -60,12 +60,14 @@
 
 ---
 
-## Phase 0 완료 게이트 (전부 통과해야 Phase 1→2 진행)
-- [ ] 키움 모의 App Key/Secret로 **접근토큰 발급 1회 성공** (curl/Postman)
-- [ ] 키움 모의계좌 **잔고조회 200 응답**
-- [ ] Supabase 프로젝트 접속 + CLI 로컬 링크
-- [ ] `python --version` 3.11+, `supabase --version` 동작
-- [ ] docs/01 "확정 스펙" 표의 모든 칸이 실제 값으로 채워짐
+## Phase 0 완료 게이트
+- [x] 키움 모의 App Key/Secret로 **접근토큰 발급 성공** ✅ (2026-09-01, 스모크 테스트)
+- [~] 키움 모의계좌 **잔고조회** — 토큰 성공 확인됨. 잔고 파라미터 세부는 Phase 2에서 정밀 실측
+- [ ] Supabase 프로젝트 접속 + CLI 로컬 링크 ← **Phase 3 전까지만 하면 됨** (Phase 1은 불필요)
+- [x] `python` 3.12 동작 ✅ / `supabase` CLI 는 Phase 3에서
+- [~] docs/01 스펙 표: 토큰·잔고·base URL ✅ / 주문·실시간은 Phase 2
+
+> **결론:** Phase 1(분석 로직 이식)에 필요한 게이트는 모두 통과. Supabase(B)는 Phase 3 전까지 병행하면 됨.
 
 ## 여기서 안 하는 것 (명시)
 - ❌ Firebase/FCM (백그라운드 푸시) — Phase 5-B에서 결정

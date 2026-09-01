@@ -12,10 +12,10 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-01 |
-| **현재 Phase** | **Phase 0** (환경 구축 & API 스펙 확정) — 거의 완료 |
-| **코드 상태** | git 초기화됨(커밋 e3913f8). engine/ Phase 0 스캐폴딩 + 키움 스모크 테스트 존재 |
-| **다음 마일스톤** | 사용자가 `.env` 채우고 스모크 테스트 실행 → "토큰 발급 성공" 확인 → Phase 1(분석 로직 이식) 착수 |
-| **블로커** | 없음. 사용자의 스모크 테스트 1회 실행 대기 |
+| **현재 Phase** | **Phase 1 착수 준비** (Phase 0 핵심 게이트 통과) |
+| **코드 상태** | git 초기화. engine/ Phase 0 스캐폴딩. **키움 모의 토큰 발급 성공 확인됨(2026-09-01)** |
+| **다음 마일스톤** | Phase 1 — breakZone 분석 로직 이식 → `build_candidates()` 후보 산출 (Claude 담당, 키 불필요) |
+| **블로커** | 없음. (Supabase 프로젝트 생성은 Phase 3 전까지 병행) |
 
 ---
 
@@ -58,6 +58,11 @@ python tools/check_kiwoom_token.py
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-01 (Phase 0 게이트 통과 ✅)
+- 사용자가 `.env`에 모의 키 입력 후 `python tools/check_kiwoom_token.py` 실행 → **"접근토큰 발급 성공"** 확인. 키움 모의 REST 연결 실증.
+- venv 활성화는 실행정책으로 실패했으나 전역 Python(3.12)에 deps 설치되어 그대로 실행됨. (Phase 1부터 venv 권장 — 실행정책 `Set-ExecutionPolicy -Scope Process RemoteSigned` 후 활성화)
+- → **Phase 0 핵심 게이트 통과. Phase 1(분석 로직 이식) 착수 가능.**
 
 ### 세션 2026-09-01 (이어서 — Phase 0 스캐폴딩)
 - **키움 스펙 실측:** 공식 저장소 예제 + younghwan91/kiwoom-rest-api `auth.py` 소스로 확정 →
