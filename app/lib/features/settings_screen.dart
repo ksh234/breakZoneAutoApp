@@ -11,8 +11,7 @@ const _specs = <(String, String, String, bool, num)>[
   ('기본 설정', 'daily_max_loss_krw', '일 손실 상한(원)', true, 500000),
   ('기본 설정', 'tick_seconds', '평가 주기(초)', true, 5),
   // 매수 설정
-  ('매수 설정', 'entry_drop_min', '진입 하락비율 하한(%)', false, 30),
-  ('매수 설정', 'entry_drop_max', '진입 하락비율 상한(%)', false, 40),
+  ('매수 설정', 'entry_drop_pct', '진입 하락비율 기준(%) — 해제가 대비 이 % 이상 하락 시 매수', false, 30),
   ('매수 설정', 'per_stock_krw', '종목당 총 투자액(원)', true, 1000000),
   ('매수 설정', 'entry_split_pct', '1회 매수 비중 (0~1, 0.3=30%)', false, 0.30),
   ('매수 설정', 'max_entries', '최대 분할매수 횟수', true, 4),

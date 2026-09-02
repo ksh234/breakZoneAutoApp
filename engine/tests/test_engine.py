@@ -54,10 +54,10 @@ def test_tick_places_buy_on_entry_signal(_mock_market):
 
 
 @patch("src.strategy.engine.is_market_open", return_value=True)
-def test_tick_no_buy_when_out_of_range(_mock_market):
+def test_tick_no_buy_when_drop_below_threshold(_mock_market):
     broker = _broker(price=9000, positions=[])
     e = _engine(broker)
-    e.candidates = {"005930": _cand(drop_ratio=50)}  # 구간 밖
+    e.candidates = {"005930": _cand(drop_ratio=25)}  # 25 < 기준 30 → 매수 안 함
     e.envelopes = {"005930": Envelope(ma=10000, upper=11000, lower=9500)}
     e.tick()
     assert not broker.place_order.called

@@ -32,11 +32,12 @@ class TestEnvelope:
 # ── Params ────────────────────────────────────────────
 class TestParams:
     def test_from_settings_extra_over_column(self):
-        row = {"enabled": True, "entry_drop_min": 25,
-               "extra": {"env_band": 0.15, "take_profit_pct": 20}}
+        row = {"enabled": True, "max_positions": 3,
+               "extra": {"env_band": 0.15, "take_profit_pct": 20, "entry_drop_pct": 25}}
         p = StrategyParams.from_settings(row)
         assert p.enabled is True
-        assert p.entry_drop_min == 25       # 컬럼
+        assert p.max_positions == 3         # 컬럼
+        assert p.entry_drop_pct == 25       # extra
         assert p.env_band == 0.15           # extra 우선
         assert p.take_profit_pct == 20      # extra
         assert p.env_period == 20           # 기본값
@@ -60,11 +61,19 @@ class TestShouldEnter:
         assert d.enter and d.kind == "new"
         assert d.qty == 300_000 // 9000   # one_buy 30만 / 9000
 
-    def test_new_reject_drop_out_of_range(self):
-        d = should_enter(drop_ratio=50, status="ok", price=9000, env=self._env(),
-                         params=_params(), state=PositionState("x"), holding=False,
-                         avg_price=None, positions_cnt=0, cash=1_000_000)
+    def test_new_reject_drop_below_threshold(self):
+        # 하락비율 25 < 기준 30 → 매수 안 함
+        d = should_enter(drop_ratio=25, status="ok", price=9000, env=self._env(),
+                         params=_params(entry_drop_pct=30), state=PositionState("x"),
+                         holding=False, avg_price=None, positions_cnt=0, cash=1_000_000)
         assert not d.enter
+
+    def test_new_enter_when_dropped_more(self):
+        # 하락비율 50 >= 기준 30 → 매수 (많이 떨어져도 삼)
+        d = should_enter(drop_ratio=50, status="ok", price=9000, env=self._env(),
+                         params=_params(entry_drop_pct=30), state=PositionState("x"),
+                         holding=False, avg_price=None, positions_cnt=0, cash=1_000_000)
+        assert d.enter
 
     def test_new_reject_price_above_lower(self):
         d = should_enter(drop_ratio=35, status="ok", price=9600, env=self._env(),

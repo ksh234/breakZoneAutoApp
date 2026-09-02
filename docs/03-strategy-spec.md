@@ -48,7 +48,7 @@
 순수 함수: `(candidate, price, env, position_state, settings, portfolio_ctx) -> EnterDecision`.
 
 **E1 · 신규 진입** (모두 AND):
-1. `entry_drop_min ≤ drop_ratio ≤ entry_drop_max` (기본 **30~40**: 현재가가 해제금액보다 30~40% 낮음)
+1. `drop_ratio ≥ entry_drop_pct` (기본 **30**: 현재가가 해제금액보다 30% 이상 낮음. 많이 떨어질수록 매수 대상 — 상한 없음)
 2. `price < env_lower` (현재가가 envelope 하단 아래)
 3. `price ≥ min_price` (기본 **1000원** — 저가주 필터, 조절 가능. 0=무제한. 신규·추가매수 공통)
 4. `candidate.status == 'ok'`(신뢰가능) 이고 미보유, `positions_cnt < max_positions`
@@ -153,8 +153,7 @@ async def tick():
 | `mode` | demo/real | demo |
 | `env_period` | envelope 이동평균 기간(일) | 20 |
 | `env_band` | envelope 밴드 비율(±) | 0.10 |
-| `entry_drop_min` | 진입 하락비율 하한 | 30 |
-| `entry_drop_max` | 진입 하락비율 상한 | 40 |
+| `entry_drop_pct` | 진입 하락비율 기준(이 % 이상 하락 시 매수) | 30 |
 | `min_price` | 최소 매수가(원, 이 미만 매수 안 함, 0=무제한) | 1000 |
 | `per_stock_krw` | 종목당 총 투자예정액 | 1,000,000 |
 | `entry_split_pct` | 1회 매수 비중(총액 대비) | 0.30 |

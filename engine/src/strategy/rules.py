@@ -64,8 +64,8 @@ def should_enter(
             return _no_enter(f"status={status}")
         if drop_ratio is None:
             return _no_enter("drop_ratio 없음")
-        if not (params.entry_drop_min <= drop_ratio <= params.entry_drop_max):
-            return _no_enter(f"drop_ratio {drop_ratio} 구간 밖")
+        if drop_ratio < params.entry_drop_pct:
+            return _no_enter(f"drop_ratio {drop_ratio} < 기준 {params.entry_drop_pct}")
         if not (price < env.lower):
             return _no_enter("현재가가 envelope 하단 위")
         if positions_cnt >= params.max_positions:

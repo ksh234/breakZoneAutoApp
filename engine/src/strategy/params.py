@@ -13,8 +13,7 @@ class StrategyParams:
     env_period: int = 20
     env_band: float = 0.10
     # 진입
-    entry_drop_min: float = 30.0
-    entry_drop_max: float = 40.0
+    entry_drop_pct: float = 30.0   # 진입 하락비율 기준(%). 현재가가 해제금액 대비 이 % 이상 하락 시 진입
     min_price: int = 1000          # 최소 매수가(원) — 이 미만 종목은 매수 안 함(0=무제한)
     per_stock_krw: int = 1_000_000
     entry_split_pct: float = 0.30
