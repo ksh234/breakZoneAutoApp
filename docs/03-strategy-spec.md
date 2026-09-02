@@ -50,8 +50,9 @@
 **E1 · 신규 진입** (모두 AND):
 1. `entry_drop_min ≤ drop_ratio ≤ entry_drop_max` (기본 **30~40**: 현재가가 해제금액보다 30~40% 낮음)
 2. `price < env_lower` (현재가가 envelope 하단 아래)
-3. `candidate.status == 'ok'`(신뢰가능) 이고 미보유, `positions_cnt < max_positions`
-4. 리스크 통과(§3)
+3. `price ≥ min_price` (기본 **1000원** — 저가주 필터, 조절 가능. 0=무제한. 신규·추가매수 공통)
+4. `candidate.status == 'ok'`(신뢰가능) 이고 미보유, `positions_cnt < max_positions`
+5. 리스크 통과(§3)
 → **분할매수**: 1회 매수액 = `per_stock_krw × entry_split_pct`(기본 100만 × **30%** = 30만). **누적 매수액이 `per_stock_krw`(종목당 총액)를 넘지 않도록 상한**(2026-09-02 확정) — 30%씩 사되 합계가 총액 도달 시 중단(약 3~4회). `max_entries` 는 보조 상한.
 
 **E2 · 추가매수(물타기)** — 보유 중:
@@ -154,6 +155,7 @@ async def tick():
 | `env_band` | envelope 밴드 비율(±) | 0.10 |
 | `entry_drop_min` | 진입 하락비율 하한 | 30 |
 | `entry_drop_max` | 진입 하락비율 상한 | 40 |
+| `min_price` | 최소 매수가(원, 이 미만 매수 안 함, 0=무제한) | 1000 |
 | `per_stock_krw` | 종목당 총 투자예정액 | 1,000,000 |
 | `entry_split_pct` | 1회 매수 비중(총액 대비) | 0.30 |
 | `max_entries` | 최대 분할매수 횟수 | 4 |

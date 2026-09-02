@@ -45,6 +45,10 @@ def should_enter(
     if not price or price <= 0 or env is None:
         return _no_enter("시세/envelope 없음")
 
+    # 최소 매수가 필터(신규·추가매수 공통). 0 이면 무제한.
+    if params.min_price and price < params.min_price:
+        return _no_enter(f"현재가 {price} < 최소매수가 {params.min_price}")
+
     # 분할매수 예산·횟수 상한
     remaining = params.per_stock_krw - state.invested_krw
     if remaining <= 0 or state.entries_done >= params.max_entries:

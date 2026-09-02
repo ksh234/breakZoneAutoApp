@@ -90,6 +90,22 @@ class TestShouldEnter:
                          holding=False, avg_price=None, positions_cnt=0, cash=1_000_000)
         assert not d.enter
 
+    def test_reject_below_min_price(self):
+        # 현재가 900 < 최소매수가 1000 → 매수 안 함 (다른 조건 다 충족해도)
+        d = should_enter(drop_ratio=35, status="ok", price=900,
+                         env=Envelope(ma=1000, upper=1100, lower=950),
+                         params=_params(min_price=1000), state=PositionState("x"),
+                         holding=False, avg_price=None, positions_cnt=0, cash=1_000_000)
+        assert not d.enter
+
+    def test_min_price_adjustable(self):
+        # 최소매수가를 500 으로 낮추면 900 도 매수 가능
+        d = should_enter(drop_ratio=35, status="ok", price=900,
+                         env=Envelope(ma=1000, upper=1100, lower=950),
+                         params=_params(min_price=500), state=PositionState("x"),
+                         holding=False, avg_price=None, positions_cnt=0, cash=1_000_000)
+        assert d.enter and d.kind == "new"   # 900 < lower 950, drop 35 in range, price>=min500
+
     def test_add_on_dip(self):
         p = _params(add_on_drop_pct=0.07)
         st = PositionState("005930", entries_done=1, invested_krw=300_000)
