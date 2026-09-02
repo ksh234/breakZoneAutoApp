@@ -12,8 +12,8 @@ pandas>=2.0
 # Phase 2: 키움 브로커 (실시간 시세 WebSocket)
 websocket-client>=1.7
 
-# ── Phase 3~ (Supabase 중계) ──
-# supabase>=2.4
+# Phase 3: Supabase 중계
+supabase>=2.4
 
 # ── 개발/테스트 ──
 pytest>=8.0

@@ -12,10 +12,10 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-02 |
-| **현재 Phase** | **Phase 2 브로커 코어 완료** → 통합검증(왕복주문) 진행 |
-| **코드 상태** | `broker/`(models·base·kiwoom·errors) 구현. 읽기 전용 라이브 검증 성공(토큰·잔고 5천만·현재가). 테스트 85개 통과. |
-| **다음 마일스톤** | 사용자 `it_kiwoom.py --order` 왕복주문 실증 → Phase 2 완료 → Phase 3(Supabase) |
-| **블로커** | 없음. (Supabase 프로젝트 생성은 Phase 3 전까지 병행) |
+| **현재 Phase** | **Phase 3 코드 완료** → 라이브 검증 대기(사용자 Supabase 키) |
+| **코드 상태** | `broker/` + `relay/`(supabase_client) + `config.py` + supabase 마이그레이션 3종. 테스트 91개 통과. |
+| **다음 마일스톤** | 사용자: Supabase 키 `.env` 입력 + 마이그레이션 적용 → `check_supabase.py` 확인. 그리고 `it_kiwoom.py --order`(장중). 이후 Phase 4(매매 루프) |
+| **블로커** | 없음. 사용자 Supabase 프로젝트 키/마이그레이션 적용 대기 |
 
 ---
 
@@ -33,30 +33,35 @@ python tools/check_kiwoom_token.py
 → "✅ 접근토큰 발급 성공" 나오면 Phase 0 핵심 게이트 통과. (결과를 다음 세션에 알려주면 됨)
 - (병행 가능) [supabase.com](https://supabase.com) 프로젝트 생성(Seoul) → URL·anon·service_role 확보.
 
-**지금 — 사용자(🙋): 왕복주문 실증 (Phase 2 완료 게이트)**
+**사용자(🙋) 할 일 — 두 가지 (순서 무관):**
+
+*(A) Supabase 연결 (Phase 3 라이브 검증)*
+1. Supabase 프로젝트에서 `SUPABASE_URL` / `service_role` 키 / 사용자 UID(`SUPABASE_OWNER_UUID`) 확보 → `engine\.env` 에 입력
+2. 마이그레이션 적용: 대시보드 **SQL Editor** 에 `supabase/migrations/0001_init.sql` → `0002_rls.sql` → `0003_realtime.sql` 순서로 붙여넣고 각각 Run
+3. 확인: `.\.venv\Scripts\python.exe tools\check_supabase.py` → "중계 동작 확인" + 대시보드 Table editor 에 bot_state/candidates/events 행 생성
+
+*(B) 키움 왕복주문 (Phase 2 완료 게이트) — 평일 장중(09:00~15:30)*
 ```powershell
 cd engine
-.\.venv\Scripts\python.exe tools\it_kiwoom.py --order       # 저가 지정가 매수1주→미체결확인→취소
-.\.venv\Scripts\python.exe tools\it_kiwoom.py --order --ws  # 장중이면 실시간 시세도
+.\.venv\Scripts\python.exe tools\it_kiwoom.py --order
 ```
-→ "주문번호 수신 → 미체결 확인 → 취소 완료" 나오면 Phase 2 완료.
+→ "주문번호 → 미체결 → 취소 완료" 나오면 Phase 2 완료.
 
-**그다음 — Phase 3 (Supabase 동기화, 🤝):**
-1. supabase 마이그레이션(7개 테이블 DDL + RLS + Realtime) — docs/02
-2. `relay/supabase_client.py`(state push / commands 구독 / 하트비트)
-3. 봇 실행 시 bot_state 하트비트 + candidates upsert 확인
-> 선행: 사용자 Supabase 프로젝트 생성(Seoul).
+**그다음 — Phase 4 (전략 엔진 매매 루프, 🤝 ⭐):**
+- `strategy/rules.py`(진입/청산 규칙) + `risk.py`(리스크가드·kill-switch) + `engine.py`(오케스트레이션) + `main.py`(스케줄러·상태기계)
+- ⭐ 여기서 **사용자의 자동매수/매도 조건**을 함께 확정(Claude가 후보 항목 메뉴 제시 → 사용자 선택). D-008.
+- candidates 현재가 소스를 네이버→키움 실시간으로 배선(D-005).
 
-**미결(Phase 2 관련):**
-- candidates 현재가 소스 네이버→키움 교체는 **Phase 4(전략엔진이 broker 주입)** 에서 배선. 지금 candidates 는 네이버로 독립 동작 유지.
+**미결:**
 - 키움 정정 TR(kt10002) 미검증(취소+재주문으로 대체 가능).
 
 **재현:**
 ```powershell
 cd engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 85개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 91개
 .\.venv\Scripts\python.exe -m src.analysis.candidates       # 경고주 후보
-.\.venv\Scripts\python.exe tools\it_kiwoom.py               # 브로커 읽기전용 확인
+.\.venv\Scripts\python.exe tools\it_kiwoom.py               # 브로커 읽기전용
+.\.venv\Scripts\python.exe tools\check_supabase.py          # 중계(키 입력 후)
 ```
 
 ---
@@ -76,10 +81,20 @@ cd engine
 - [x] 키움 모의 접근토큰 발급 성공(Phase 0 게이트)
 - [x] **Phase 1: breakZone 분석 로직 이식 + `build_candidates()` 라이브 후보 산출(22종목) + 테스트 68개 통과**
 - [x] **Phase 2: 키움 스펙 실측 + `broker/`(BrokerAdapter+KiwoomRestBroker) 구현 + 읽기전용 라이브 검증 + 테스트 85개** (왕복주문 실증은 사용자 대기)
+- [x] **Phase 3: Supabase 마이그레이션(7테이블+RLS+Realtime) + `relay/`(Relay 중계) + config + 테스트 91개** (라이브 검증은 사용자 키 대기)
 
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-02 (Phase 3 Supabase 중계 코드 ✅)
+- **결정:** D-012 = 명령 수신 폴링(스레드, 1.5초), Realtime 후속.
+- **마이그레이션:** `supabase/migrations/` 0001_init(7테이블)·0002_rls·0003_realtime.
+- **엔진:** `src/config.py`(env 중앙화, SUPABASE_* 추가), `src/relay/supabase_client.py`(Relay: ensure_singletons·push_bot_state·upsert_candidates/positions·insert_order/event·load_settings·start_command_listener 폴링·ack_command). requirements 에 supabase 추가, .env.example 에 SUPABASE_OWNER_UUID.
+- **테스트:** test_relay.py(supabase 클라이언트 mock, 페이로드 검증) — **총 91개 통과.**
+- **도구:** `tools/check_supabase.py`(스모크: 싱글턴·하트비트·후보 upsert·이벤트·명령 리스너).
+- **미검증(라이브):** 사용자 Supabase 키/마이그레이션 적용 후 check_supabase 로 확인 예정.
+- **사용자 가이드 제공:** Supabase 프로젝트 생성·키 확보·auth 사용자(owner UID) 생성 절차.
 
 ### 세션 2026-09-02 (Phase 2 브로커 코어 ✅)
 - **키움 스펙 실측 완료** → docs/01 표 채움: 주문 kt10000(매수)/kt10001(매도)/kt10003(취소) path `/api/dostk/ordr`(body dmst_stex_tp/stk_cd/ord_qty/trde_tp/ord_uv, trde_tp 3=시장/0=지정), 현재가 ka10001 `/api/dostk/stkinfo`(cur_prc), 잔고 kt00018(acnt_evlt_remn_indv_tot[]), 미체결 ka10075, WebSocket `/api/dostk/websocket`(LOGIN token→REG 0B→REAL, PING echo).

@@ -15,6 +15,7 @@
 | D-006 | 키움 MCP = 개발 보조. 봇 매매경로는 REST/WS 직접 | 2026-09-01 | ✅ 확정 |
 | D-007 | Phase 2 브로커 = 자체구현(kiwoom-client 참조) | 2026-09-02 | ✅ 확정 |
 | D-011 | 브로커 동기(requests) REST + 스레드 WebSocket | 2026-09-02 | ✅ 확정 |
+| D-012 | 명령 수신 = 폴링(스레드), Realtime 후속 | 2026-09-02 | ✅ 확정 |
 | D-008 | 자동매매 조건은 Phase 4 확정 + 앱 조절 | 2026-09-01 | ⏳ 예정 |
 | D-009 | 문서 관리 체계 = PROGRESS + DECISIONS | 2026-09-01 | ✅ 확정 |
 | D-010 | Python 3.12 설치(3.11+ 요건 충족) | 2026-09-01 | ✅ 확정 |
@@ -58,6 +59,13 @@
 - **결정: (A) 자체구현.** 경위: **Claude 제안으로 진행** → **사용자 확인(2026-09-02) 유지 결정.** 공식 저장소 예제 + kiwoom-client 소스에서 **정확한 스펙을 실측**해 참조(docs/01 표).
 - **근거:** 필요한 엔드포인트가 ~8개 REST + WebSocket 1개로 **표면적이 작다**. 실제 **돈이 오가는 주문 경로**는 완전한 통제가 중요 → 0-star 미검증 라이브러리 의존 회피. deps 최소(requests + websocket-client). `BrokerAdapter` 추상화로 나중에 교체 가능(전략 코드 무변경).
 - **영향:** docs/01 스펙 표를 2026-09-02 실측으로 완성. `broker/kiwoom.py` 를 직접 구현.
+
+## D-012 · 명령(commands) 수신 = 폴링(스레드), Realtime 후속 ✅
+- **배경:** docs/02 는 commands 를 Supabase Realtime 구독으로 수신(폴백 폴링) 설계.
+- **결정:** 우선 **폴링**(백그라운드 스레드, 1.5초 주기로 `status='pending'` 조회 → ack → 처리 → done/failed). Realtime(WebSocket 구독)은 후속 개선.
+- **근거:** D-011 동기+스레드 기조와 일치. supabase-py Realtime 은 async/설정 복잡 → 폴링이 단순·견고. acceptance "명령 수신 1~2초 내" 를 1.5초 폴링으로 충족. 앱→봇 명령은 저빈도라 폴링 부하 미미.
+- **영향:** `relay.start_command_listener(handler)` 가 폴링 스레드. kill/close_position 등 즉시성 필요한 명령도 1~2초 내 처리.
+- **재검토 트리거:** 명령 지연이 문제되거나 폴링 부하가 커질 때 Realtime 전환.
 
 ## D-011 · 브로커 = 동기(requests) REST + 스레드 WebSocket ✅
 - **배경:** docs/00 §7·docs/03 의사코드는 asyncio(`await broker...`)를 전제. 그러나 필요한 건 소수 REST 호출 + WS 1개.
