@@ -12,56 +12,42 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-02 |
-| **현재 Phase** | **Phase 4 진행중** — 전략 순수 코어 완료, 오케스트레이션(engine/main) 남음 |
-| **코드 상태** | analysis+broker+relay+**strategy(rules/risk/indicators/state/params)**. 테스트 120개. 매매전략 D-013 확정(수치 조절가능). |
-| **다음 마일스톤** | `strategy/engine.py`(오케스트레이션) + `main.py`(스케줄러·상태기계) — 분석+브로커+relay+규칙 배선. candidates 현재가 키움化(D-005) |
-| **블로커** | 없음. (남은 확인: 키움 왕복주문 장중 1회) |
+| **현재 Phase** | **Phase 4 코드 완료** — 오케스트레이션+main 포함. 라이브(장중) 운용 검증 대기 |
+| **코드 상태** | analysis+broker+relay+strategy(rules/risk/indicators/state/params/**engine/main/market**). 테스트 **130개**. 4조각 배선 완료. |
+| **다음 마일스톤** | 장중 라이브 실전(모의) 운용: `python -m src.main` → 앱/commands 'start' → 하루 운용 관찰. 이후 Phase 5(앱). |
+| **블로커** | 없음. (라이브 검증은 장중 필요) |
 
 ---
 
 ## ▶️ 다음에 할 일 (바로 착수 지점)
 
-**사용자(🙋) — 지금 바로: 키움 연결 확인 (Phase 0 마지막 게이트)**
+**🙋 장중 라이브 운용 검증 (Phase 4 완료 게이트) — 평일 09:00~15:30**
 ```powershell
 cd engine
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env      # .env 에 모의 App Key/Secret/계좌번호 입력
-python tools/check_kiwoom_token.py
+.\.venv\Scripts\python.exe -m src.main
 ```
-→ "✅ 접근토큰 발급 성공" 나오면 Phase 0 핵심 게이트 통과. (결과를 다음 세션에 알려주면 됨)
-- (병행 가능) [supabase.com](https://supabase.com) 프로젝트 생성(Seoul) → URL·anon·service_role 확보.
+→ 봇이 키움+Supabase 연결, status=stopped 로 대기. 매매를 켜려면 Supabase `commands` 에
+`{owner:<UID>, type:'start', status:'pending'}` INSERT (또는 Phase5 앱). 자동진입은 `settings.enabled=true` 필요.
+관찰: Supabase `bot_state`(하트비트)·`candidates`·`orders`·`events` 갱신. Ctrl+C 로 종료.
+> ⚠️ 모의계좌라 안전하지만, 처음엔 `settings.enabled=false`(관망)로 하트비트·후보만 확인 후 켜기 권장.
 
-**사용자(🙋) 할 일 — 두 가지 (순서 무관):**
+**🙋 (미완) 키움 왕복주문 `it_kiwoom.py --order` — 장중 1회 (Phase 2 마무리)**
 
-*(A) Supabase 연결 (Phase 3 라이브 검증)*
-1. `SUPABASE_URL`(Settings>Data API>Project URL) / **secret key**(`sb_secret_…`, service_role 대체) / 사용자 UID(`SUPABASE_OWNER_UUID`) → `engine\.env`(`SUPABASE_SECRET_KEY`)
-2. 마이그레이션 적용: 대시보드 **SQL Editor** 에 `supabase/migrations/0001_init.sql` → `0002_rls.sql` → `0003_realtime.sql` 순서로 붙여넣고 각각 Run
-3. 확인: `.\.venv\Scripts\python.exe tools\check_supabase.py` → "중계 동작 확인" + 대시보드 Table editor 에 bot_state/candidates/events 행 생성
+**그다음 — Phase 5 (Flutter 앱, 🤖):** 대시보드·제어(start/stop/kill)·설정(파라미터 조절)·이벤트. Flutter 이미 설치됨(D:\dev\flutter).
 
-*(B) 키움 왕복주문 (Phase 2 완료 게이트) — 평일 장중(09:00~15:30)*
-```powershell
-cd engine
-.\.venv\Scripts\python.exe tools\it_kiwoom.py --order
-```
-→ "주문번호 → 미체결 → 취소 완료" 나오면 Phase 2 완료.
-
-**그다음 — Phase 4 (전략 엔진 매매 루프, 🤝 ⭐):**
-- `strategy/rules.py`(진입/청산 규칙) + `risk.py`(리스크가드·kill-switch) + `engine.py`(오케스트레이션) + `main.py`(스케줄러·상태기계)
-- ⭐ 여기서 **사용자의 자동매수/매도 조건**을 함께 확정(Claude가 후보 항목 메뉴 제시 → 사용자 선택). D-008.
-- candidates 현재가 소스를 네이버→키움 실시간으로 배선(D-005).
-
-**미결:**
-- 키움 정정 TR(kt10002) 미검증(취소+재주문으로 대체 가능).
+**미결/후속:**
+- 키움 정정 TR(kt10002) 미검증(취소+재주문 대체 가능).
+- 포지션 전략상태(분할매수/매도) 영속화 — 재시작 시 브로커 잔고 기반 근사 복원만. 정밀화 필요.
+- 오프라인 버퍼(네트워크 끊김 시 상태 재전송) 후속.
+- 명령 리스너 라이브 실증(`--listen` 또는 앱).
 
 **재현:**
 ```powershell
 cd engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 91개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 130개
 .\.venv\Scripts\python.exe -m src.analysis.candidates       # 경고주 후보
-.\.venv\Scripts\python.exe tools\it_kiwoom.py               # 브로커 읽기전용
-.\.venv\Scripts\python.exe tools\check_supabase.py          # 중계(키 입력 후)
+.\.venv\Scripts\python.exe tools\check_supabase.py          # 중계
+.\.venv\Scripts\python.exe -m src.main                      # 봇 (장중 라이브)
 ```
 
 ---
@@ -86,6 +72,14 @@ cd engine
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-02 (Phase 4 오케스트레이션 ✅ — 4조각 배선)
+- **추가 조건:** `min_price`(최소 매수가, 기본 1000, 조절가능) — 신규·추가매수 공통.
+- **market.py:** `is_market_open`(KST 09:00~15:30, 주말·공휴일 제외, holidays.KR).
+- **engine.py(StrategyEngine):** refresh(후보수집+envelope/prev_close 계산+WS구독) · tick(sync_positions→청산평가→진입평가→하트비트) · 주문실행(_buy/_sell, relay 반영·이벤트) · kill(전량 시장가 청산) · close_position · handle_command(start/stop/pause/resume/kill/set_param/close_position) · 일손익 리셋 · 상한가 근사. **현재가는 broker.get_price(키움 WS캐시+REST)** 사용 → D-005 배선 완료(loop에서 네이버 미사용).
+- **main.py:** config 검증 → 브로커 connect + relay ensure_singletons → 명령 리스너 → tick 루프(tick_seconds) + REFRESH_SEC 주기 refresh + Ctrl+C 안전종료. 시작 status=stopped(안전, 'start' 명령 대기).
+- **테스트:** test_engine.py 6 + test_market.py 2 — **총 130개 통과.** import 스모크 OK.
+- **남은 것:** 장중 라이브 운용 검증(모의), 상태 영속화(재시작 복원 정밀화), 오프라인 버퍼.
 
 ### 세션 2026-09-02 (Phase 4 전략 코어 ✅ — 사용자 전략 확정)
 - **사용자 매매전략 확정(D-013):** 매수=하락비율 30~40% AND 현재가<envelope하단 → 분할매수(30%씩, 종목당총액 상한). 평단-7% 물타기. 매도=현재가>envelope상단 AND +15% → 50%익절, 이후 고점-5% 전량, 상한가 전량.

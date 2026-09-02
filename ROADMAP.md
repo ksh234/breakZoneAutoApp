@@ -225,11 +225,11 @@ breakZoneAutoApp/
 **산출물:** 모의계좌로 하루 자동 운용되는 봇.
 
 **완료 기준**
-- [ ] 규칙 함수 단위테스트 통과(경계값 포함)
-- [ ] 앱 명령(start/stop/kill/set_param)에 봇이 정확히 반응
-- [ ] 리스크 한도 초과 시 주문 차단 로그·이벤트
-- [ ] kill-switch → 전량 시장가 청산 + running 종료 확인(모의)
-- [ ] 하루 모의 운용 후 orders/positions/events 가 Supabase 에 일관되게 기록됨
+- [x] 규칙 함수 단위테스트 통과(경계값 포함) — test_strategy 29 + test_engine 6 (2026-09-02)
+- [x] 앱 명령(start/stop/kill/set_param)에 봇이 반응 — handle_command 단위검증(라이브 실증 대기)
+- [x] 리스크 한도 초과 시 주문 차단 로그·이벤트 — ok_buy/ok_sell + risk_block 이벤트
+- [x] kill-switch → 전량 시장가 청산 + stopped — kill() 단위검증
+- [ ] 하루 모의 운용 후 orders/positions/events Supabase 일관 기록 — **장중 라이브 검증 대기**
 
 ---
 
