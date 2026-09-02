@@ -55,8 +55,8 @@
 ## D-007 · Phase 2 브로커 = 자체구현 (kiwoom-client 참조) ✅
 - **배경:** `KiwoomRestBroker`(docs/01)를 밑바닥부터 짤지, 기존 Python 래퍼를 쓸지.
 - **선택지:** (A) 자체구현 / (B) `kiwoom-client` 래핑([younghwan91/kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api), 0-star) / (C) 공식 `kiwoomcli` 재사용.
-- **결정: (A) 자체구현.** 단, 공식 저장소 예제 + kiwoom-client 소스에서 **정확한 스펙을 실측**해 참조(docs/01 표).
-- **근거:** 필요한 엔드포인트가 ~8개 REST + WebSocket 1개로 **표면적이 작다**. 실제 **돈이 오가는 주문 경로**는 완전한 통제가 중요 → 0-star 미검증 라이브러리 의존 회피. deps 최소(requests + websockets). `BrokerAdapter` 추상화로 나중에 교체 가능.
+- **결정: (A) 자체구현.** 경위: **Claude 제안으로 진행** → **사용자 확인(2026-09-02) 유지 결정.** 공식 저장소 예제 + kiwoom-client 소스에서 **정확한 스펙을 실측**해 참조(docs/01 표).
+- **근거:** 필요한 엔드포인트가 ~8개 REST + WebSocket 1개로 **표면적이 작다**. 실제 **돈이 오가는 주문 경로**는 완전한 통제가 중요 → 0-star 미검증 라이브러리 의존 회피. deps 최소(requests + websocket-client). `BrokerAdapter` 추상화로 나중에 교체 가능(전략 코드 무변경).
 - **영향:** docs/01 스펙 표를 2026-09-02 실측으로 완성. `broker/kiwoom.py` 를 직접 구현.
 
 ## D-011 · 브로커 = 동기(requests) REST + 스레드 WebSocket ✅
