@@ -31,15 +31,17 @@ create table settings (
   owner         uuid not null,
   mode          text not null default 'demo' check (mode in ('demo','real')),
   enabled       boolean not null default false,        -- 자동매매 on/off
-  -- 전략 파라미터 (기본값=placeholder, docs/03에서 확정)
-  entry_drop_min      numeric,      -- 진입 하락비율 하한
-  entry_drop_max      numeric,      -- 진입 하락비율 상한
-  per_trade_krw       bigint default 1000000,          -- 1회 매수금액
-  max_positions       int    default 5,
-  take_profit_pct     numeric default 10,
-  stop_loss_pct       numeric default -5,
-  daily_max_loss_krw  bigint default 500000,
-  extra               jsonb  default '{}'::jsonb,       -- 확장 파라미터
+  -- ⚠️ 아래 개별 컬럼은 초기 설계의 placeholder(레거시). 현재 전략 파라미터는
+  --    전부 `extra` jsonb 에 저장·로드한다(StrategyParams, docs/03 §6). 이 컬럼들은
+  --    미사용(무해). 실제 사용 컬럼: owner, mode, enabled, extra.
+  entry_drop_min      numeric,      -- (레거시·미사용) → extra.entry_drop_pct 로 대체
+  entry_drop_max      numeric,      -- (레거시·미사용)
+  per_trade_krw       bigint default 1000000,          -- (레거시·미사용) → extra.per_stock_krw
+  max_positions       int    default 5,                -- (레거시·미사용) → extra.max_positions
+  take_profit_pct     numeric default 10,              -- (레거시·미사용) → extra.take_profit_pct
+  stop_loss_pct       numeric default -5,              -- (레거시·미사용, 손절 없음)
+  daily_max_loss_krw  bigint default 500000,           -- (레거시·미사용) → extra.max_unrealized_loss_krw
+  extra               jsonb  default '{}'::jsonb,       -- ★ 전략 파라미터 전체(StrategyParams)
   updated_at    timestamptz not null default now()
 );
 create trigger t_settings before update on settings
@@ -138,7 +140,7 @@ create table commands (
   type        text not null
               check (type in ('start','stop','pause','resume','kill',
                               'set_param','close_position','approve_order','reject_order')),
-  payload     jsonb default '{}'::jsonb,   -- 예: {"code":"005930"} / {"per_trade_krw":500000}
+  payload     jsonb default '{}'::jsonb,   -- 예: {"code":"005930"}(close_position) / set_param 은 settings 직접 수정
   status      text not null default 'pending'
               check (status in ('pending','acked','done','failed')),
   result      text,

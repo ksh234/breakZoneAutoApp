@@ -19,11 +19,11 @@
 
 ## 2. 리스크 가드 (봇 강제 — docs/03 §3 재확인)
 
-- 1회 한도 / 보유수 상한 / 현금 검증 / 일 손실 상한 / 가격 sanity / 중복주문 가드 / 수량 검증.
-- **mode='real' 강제 한도:** 실전에서는 코드가 아래를 **하드 상한**으로 강제(설정이 더 커도 클램프):
-  - 초기 `per_trade_krw` 소액(예: 카나리 100,000~300,000).
+- 종목당 한도 / 보유수 상한 / 현금 검증 / 평가손실 한도 / 가격 sanity / 중복주문 가드 / 수량 검증. (구현: `strategy/risk.py::ok_buy·ok_sell`)
+- **mode='real' 강제 한도:** 실전에서는 코드가 아래를 **하드 상한**으로 강제(설정이 더 커도 클램프). 현재 `risk.clamp_real_mode` 는 골격만 — Phase 7에서 값 확정:
+  - 초기 `per_stock_krw` 소액(예: 카나리 100,000~300,000).
   - `max_positions` 축소.
-  - `daily_max_loss_krw` 보수적.
+  - `max_unrealized_loss_krw` 보수적.
   - 규칙 위반 시도 시 주문 차단 + `critical` 이벤트.
 
 ## 3. Kill-switch (다층)

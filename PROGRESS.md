@@ -12,10 +12,10 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-02 |
-| **현재 Phase** | **Phase 5 앱 코드 완료** — 실행/로그인 검증 대기(publishable key) |
-| **코드 상태** | engine(봇) 전체 + **Flutter 앱**(인증·Realtime·대시보드·제어·설정). 봇 테스트 130개, 앱 analyze 클린·web 빌드 성공. |
-| **다음 마일스톤** | 앱 `env.dart` 에 publishable key 입력 → `flutter run` 로그인 → 봇 제어. + 장중 라이브 운용(봇+앱). |
-| **블로커** | 없음. (앱 실행은 publishable key 필요, 라이브 운용은 장중 필요) |
+| **현재 Phase** | **Phase 0~5 코드 완료 + 앱 로그인·실시간 실증.** 전략 세부조정·문서 정합성 정리 완료 |
+| **코드 상태** | engine(봇) analysis/broker/relay/strategy + 테스트 **132개**. Flutter 앱 7화면(로그인·Realtime·제어·설정 그룹화) 실행·로그인 실증. |
+| **다음 마일스톤** | **장중 라이브 검증**: ①`it_kiwoom.py --order` 왕복주문 ②`python -m src.main` 봇 하루 운용(앱으로 제어). 이후 Phase 6(백테스트·모의검증). |
+| **블로커** | 없음. (라이브 검증은 장중 필요) |
 
 ---
 
@@ -72,6 +72,17 @@ cd engine
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-02 (전략 세부조정 + 문서 정합성 정리)
+- **앱 실증:** 로그인 성공 + 대시보드 실시간 데이터 확인. settings realtime 누락 → 0004 마이그레이션으로 해결. Supabase 신규 publishable key 사용.
+- **설정 화면 그룹화:** 기본/매수/매도/Envelope 카드로 재구성.
+- **전략 조정(사용자 확정):**
+  - 급등 전량매도 기준 `limit_up_pct`(기본 29) 설정화(하드코딩 제거).
+  - 진입 하락비율: 범위(min/max) → **단일 기준 `entry_drop_pct`**(이 % 이상 하락 시 매수, 상한 없음).
+  - 손실 한도: 실현손실 → **평가손실(미실현) `max_unrealized_loss_krw`** 기준으로(손절 없는 전략에 맞게, 보유 전체 순평가손실 기준 신규매수 중단).
+  - `min_price`(최소 매수가) 필터 확인.
+- **정합성 정리:** StrategyParams ↔ docs/03 §6 ↔ 앱 설정(15개) 일치 확인. 옛 파라미터명(per_trade_krw/stop_loss/entry_drop_min·max/daily_max_loss) 문서·도구·테스트에서 정리. docs/03 §4 의사코드를 실제 동기 엔진 흐름으로 갱신. settings 테이블 개별 컬럼=레거시(파라미터는 extra) 명시. ROADMAP 진행현황표 추가.
+- **테스트 132개 통과.** 커밋 22개.
 
 ### 세션 2026-09-02 (Phase 5 Flutter 앱 ✅ — 코드 완성)
 - **스캐폴딩:** `flutter create app`(web+android) + supabase_flutter/flutter_riverpod/fl_chart/intl.

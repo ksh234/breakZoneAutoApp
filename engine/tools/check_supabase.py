@@ -59,10 +59,11 @@ def main() -> int:
     relay.insert_event("test", "info", "스모크 테스트", "relay 동작 확인")
     print("    OK")
 
-    print("[4] settings 로드…")
-    s = relay.load_settings()
-    print(f"    mode={s.get('mode')} enabled={s.get('enabled')} "
-          f"per_trade_krw={s.get('per_trade_krw')} max_positions={s.get('max_positions')}")
+    print("[4] settings 로드(StrategyParams)…")
+    from src.strategy.params import StrategyParams
+    p = StrategyParams.from_settings(relay.load_settings())
+    print(f"    enabled={p.enabled} mode={p.mode} entry_drop_pct={p.entry_drop_pct} "
+          f"per_stock_krw={p.per_stock_krw} max_positions={p.max_positions}")
 
     print("\n✅ Supabase 중계 동작 확인. 대시보드 Table editor 에서 bot_state/candidates/events 확인 가능.")
 

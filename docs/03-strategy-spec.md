@@ -91,7 +91,7 @@
 ## 3. 리스크 가드 (`strategy/risk.py`) — 절대 우회 금지
 
 주문 직전 모든 주문이 통과해야 하는 검사(하나라도 실패 시 차단 + `risk_block` 이벤트):
-- **1회 한도:** 주문금액 ≤ `per_trade_krw`.
+- **종목당 한도:** 누적 매수액 ≤ `per_stock_krw` (1회 매수 = `per_stock_krw × entry_split_pct`).
 - **보유수 상한:** 신규 진입 시 `positions_cnt < max_positions`.
 - **현금 충분:** 매수금액 ≤ 주문가능현금.
 - **평가손실 한도:** 보유 전체 **평가손실(미실현)** ≥ `max_unrealized_loss_krw` 면 신규진입 중단(청산만 허용). 하락장에서 물타기 폭증 방지. (실현손실 기준은 손절매가 없는 이 전략에선 무의미 → 미실현 기준으로 결정, 2026-09-02)
@@ -100,35 +100,38 @@
 - **수량 검증:** qty>0 정수.
 - **모드 강제:** `mode='real'` 이면 실전 보수 한도(docs/05)를 강제 적용.
 
-kill-switch: `running` 중 kill 명령/치명오류/일손실 초과(옵션) → **전량 시장가 청산 후 stopped**. 앱·서버 양쪽 트리거.
+kill-switch: `running` 중 kill 명령/치명오류 → **전량 시장가 청산 후 stopped**. 앱·서버 양쪽 트리거. (평가손실 한도는 kill이 아니라 신규매수 중단만)
 
 ---
 
-## 4. 매매 루프 (`strategy/engine.py` 의사코드)
+## 4. 매매 루프 (`strategy/engine.py` — 실제 구현, 동기)
 
+`main.py` 가 `tick_seconds` 주기로 `engine.tick()` 호출:
 ```
-async def tick():
-    if state != running or not market_open: return heartbeat_only()
-    settings = relay.load_settings()
-    prices = broker/ws cache
-    # 1) 청산 우선
+def tick():                              # 동기(D-011)
+    if status != running or not market_open: return heartbeat_only()
+    sync_positions()                     # 브로커 잔고 → positions + Supabase 반영
+    pending = {u.code for u in broker.get_unfilled_orders()}   # 중복주문 방지
+    # 1) 청산 우선 (보유마다)
     for pos in positions:
-        d = should_exit(pos, prices[pos.code], settings, ctx)
-        if d.exit and risk.ok_sell(pos, d):
-            o = await broker.place_order(pos.code, SELL, pos.qty, ...); record(o, d.reason)
-    # 2) 진입
-    if settings.enabled and not daily_loss_hit:
-        for c in candidates_sorted:
-            d = should_enter(c, prices[c.code], settings, portfolio_ctx)
-            if d.enter and risk.ok_buy(c, d):
-                qty = size(d, settings, cash)
-                o = await broker.place_order(c.code, BUY, qty, ...); record(o, "entry")
+        price = broker.get_price(pos.code)        # 키움 WS 캐시 우선, 없으면 REST
+        d = should_exit(pos.qty, pos.avg_price, price, envelope[code], params, state[code], at_limit_up)
+        if d.exit and code not in pending and risk.ok_sell(...):
+            broker.place_order(code, SELL, d.qty, ...); relay.insert_order(...); day_realized_pnl += ...
+    # 2) 진입 (자동매매 ON 이고 평가손실 한도 미도달)
+    if params.enabled and unrealized_pnl() > -max_unrealized_loss_krw:
+        for cand in candidates:
+            price = broker.get_price(cand.code)
+            d = should_enter(cand.drop_ratio, cand.status, price, envelope, params, state, holding, ...)
+            if d.enter and code not in pending and risk.ok_buy(..., unrealized_pnl=..., prev_close=...):
+                broker.place_order(code, BUY, d.qty, ...); relay.insert_order(...); state.on_buy(...)
     # 3) 동기화
-    await relay.upsert_positions(...); await relay.push_bot_state(...)
+    relay.push_bot_state(status, market_open, equity, cash, day_pnl, positions_cnt)   # 하트비트
 ```
-- 주기: 시세는 실시간, 규칙 평가는 tick 주기(예: 3~10초, 파라미터). 
-- 체결 반영: 주문 후 체결조회/통보로 positions 갱신 → 재진입/재청산 판단에 반영.
-- **동시성 주의:** breakZone은 pykrx 병렬화 시 hang → 후보수집(pykrx)은 순차 또는 executor 격리, 매매 tick과 분리된 주기로.
+- **후보/지표 갱신:** `refresh()` 가 별도 주기(`REFRESH_SEC`=10분, 장중)로 KIND 수집 + 종목별 envelope/전일종가(pykrx) 계산 + 키움 WS 재구독.
+- **명령 처리:** `relay.start_command_listener` 폴링 스레드가 `commands`(start/stop/pause/resume/kill/set_param/close_position)를 1.5초 주기로 수신→`engine.handle_command`.
+- **현재가:** 키움 실시간(WS 캐시)+REST 폴백. 과거종가(envelope·해제금액)는 pykrx.
+- **동시성 주의:** breakZone은 pykrx 병렬화 시 hang → 후보수집(pykrx)은 순차. 매매 tick과 분리된 주기(refresh).
 
 ---
 
@@ -138,7 +141,7 @@ async def tick():
 - **데이터:** pykrx 과거 OHLCV로 특정 기간 각 매매일의 경고주 후보를 재구성(당시 KIND 목록은 재현 어려움 → 지정일/해제판단일 기반 근사 또는 수집 로그 활용).
 - **엔진:** 동일한 `rules.py`·`risk.py` 를 과거 시세에 적용(코드 재사용 = 실전과 동일 로직 보장).
 - **산출:** 총수익률, MDD(최대낙폭), 승률, 거래수, 평균보유일, 파라미터별 성과표.
-- **파라미터 스윕:** `entry_drop_*`, `take_profit/stop_loss`, `max_positions`, 보유기간을 그리드로 탐색.
+- **파라미터 스윕:** `entry_drop_pct`, `env_period`/`env_band`, `take_profit_pct`, `first_sell_portion`, `post_sell_stop_pct`, `limit_up_pct`, `max_entries` 등을 그리드로 탐색.
 - **주의(과최적화 경계):** in-sample/out-of-sample 분리, 슬리피지·수수료·세금·미체결 가정 반영, 결과를 맹신하지 말 것.
 
 > 백테스트의 KIND 과거 재현이 어렵다면, 우선 **모의투자 전진검증(paper forward test)** 을 주 검증수단으로 삼고 백테스트는 보조로 둔다(Phase 6).

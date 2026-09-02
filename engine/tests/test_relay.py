@@ -70,9 +70,10 @@ def test_upsert_positions_computes_pnl():
 
 
 def test_load_settings_returns_first_row():
-    r, q = _relay(data=[{"id": 1, "mode": "demo", "enabled": False, "per_trade_krw": 1000000}])
+    r, q = _relay(data=[{"id": 1, "mode": "demo", "enabled": False,
+                         "extra": {"entry_drop_pct": 30, "per_stock_krw": 1000000}}])
     s = r.load_settings()
-    assert s["mode"] == "demo" and s["per_trade_krw"] == 1000000
+    assert s["mode"] == "demo" and s["extra"]["per_stock_krw"] == 1000000
 
 
 def test_ack_command_sets_processed_at_on_done():
