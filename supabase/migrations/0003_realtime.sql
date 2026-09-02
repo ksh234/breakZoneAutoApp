@@ -6,7 +6,7 @@
 do $$
 declare t text;
 begin
-  foreach t in array array['bot_state','candidates','positions','orders','events','commands']
+  foreach t in array array['settings','bot_state','candidates','positions','orders','events','commands']
   loop
     begin
       execute format('alter publication supabase_realtime add table %I', t);
