@@ -11,10 +11,10 @@
 
 | 항목 | 값 |
 |---|---|
-| **마지막 업데이트** | 2026-09-01 |
-| **현재 Phase** | **Phase 1 완료** → Phase 2 준비 |
-| **코드 상태** | engine 분석 레이어 이식 완료. `build_candidates()` 라이브 동작(경고주 22종목 산출). 테스트 68개 통과. |
-| **다음 마일스톤** | Phase 2 — 키움 Broker Adapter(주문/시세). 先 키움 주문·실시간 TR 실측(docs/01 ⬜칸) + D-007(kiwoom-client 여부) 결정 |
+| **마지막 업데이트** | 2026-09-02 |
+| **현재 Phase** | **Phase 2 브로커 코어 완료** → 통합검증(왕복주문) 진행 |
+| **코드 상태** | `broker/`(models·base·kiwoom·errors) 구현. 읽기 전용 라이브 검증 성공(토큰·잔고 5천만·현재가). 테스트 85개 통과. |
+| **다음 마일스톤** | 사용자 `it_kiwoom.py --order` 왕복주문 실증 → Phase 2 완료 → Phase 3(Supabase) |
 | **블로커** | 없음. (Supabase 프로젝트 생성은 Phase 3 전까지 병행) |
 
 ---
@@ -33,20 +33,30 @@ python tools/check_kiwoom_token.py
 → "✅ 접근토큰 발급 성공" 나오면 Phase 0 핵심 게이트 통과. (결과를 다음 세션에 알려주면 됨)
 - (병행 가능) [supabase.com](https://supabase.com) 프로젝트 생성(Seoul) → URL·anon·service_role 확보.
 
-**다음 — Phase 2 (키움 Broker Adapter, 🤝):**
-1. 키움 주문(매수/매도/정정/취소)·체결조회·실시간 WebSocket TR 실측 → docs/01 ⬜칸 채움
-2. D-007 결정: `KiwoomRestBroker` 자체구현 vs `kiwoom-client` 래핑
-3. `broker/base.py`(BrokerAdapter) + `broker/kiwoom.py` + 모의계좌 왕복주문 테스트
-   → 이때 candidates 의 현재가 소스를 네이버 → 키움 실시간으로 교체(D-005)
-
-**병행(사용자):** Supabase 프로젝트 생성(Phase 3 전까지).
-
-**Phase 1 결과 재현:**
+**지금 — 사용자(🙋): 왕복주문 실증 (Phase 2 완료 게이트)**
 ```powershell
 cd engine
-.\.venv\Scripts\python.exe -m src.analysis.candidates            # 현재가 포함
-.\.venv\Scripts\python.exe -m src.analysis.candidates --no-price # 빠른 확인
-.\.venv\Scripts\python.exe -m pytest -q                          # 테스트 68개
+.\.venv\Scripts\python.exe tools\it_kiwoom.py --order       # 저가 지정가 매수1주→미체결확인→취소
+.\.venv\Scripts\python.exe tools\it_kiwoom.py --order --ws  # 장중이면 실시간 시세도
+```
+→ "주문번호 수신 → 미체결 확인 → 취소 완료" 나오면 Phase 2 완료.
+
+**그다음 — Phase 3 (Supabase 동기화, 🤝):**
+1. supabase 마이그레이션(7개 테이블 DDL + RLS + Realtime) — docs/02
+2. `relay/supabase_client.py`(state push / commands 구독 / 하트비트)
+3. 봇 실행 시 bot_state 하트비트 + candidates upsert 확인
+> 선행: 사용자 Supabase 프로젝트 생성(Seoul).
+
+**미결(Phase 2 관련):**
+- candidates 현재가 소스 네이버→키움 교체는 **Phase 4(전략엔진이 broker 주입)** 에서 배선. 지금 candidates 는 네이버로 독립 동작 유지.
+- 키움 정정 TR(kt10002) 미검증(취소+재주문으로 대체 가능).
+
+**재현:**
+```powershell
+cd engine
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 85개
+.\.venv\Scripts\python.exe -m src.analysis.candidates       # 경고주 후보
+.\.venv\Scripts\python.exe tools\it_kiwoom.py               # 브로커 읽기전용 확인
 ```
 
 ---
@@ -65,10 +75,19 @@ cd engine
 - [x] engine Phase 0 스캐폴딩 + 키움 연결 스모크 테스트 작성
 - [x] 키움 모의 접근토큰 발급 성공(Phase 0 게이트)
 - [x] **Phase 1: breakZone 분석 로직 이식 + `build_candidates()` 라이브 후보 산출(22종목) + 테스트 68개 통과**
+- [x] **Phase 2: 키움 스펙 실측 + `broker/`(BrokerAdapter+KiwoomRestBroker) 구현 + 읽기전용 라이브 검증 + 테스트 85개** (왕복주문 실증은 사용자 대기)
 
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-02 (Phase 2 브로커 코어 ✅)
+- **키움 스펙 실측 완료** → docs/01 표 채움: 주문 kt10000(매수)/kt10001(매도)/kt10003(취소) path `/api/dostk/ordr`(body dmst_stex_tp/stk_cd/ord_qty/trde_tp/ord_uv, trde_tp 3=시장/0=지정), 현재가 ka10001 `/api/dostk/stkinfo`(cur_prc), 잔고 kt00018(acnt_evlt_remn_indv_tot[]), 미체결 ka10075, WebSocket `/api/dostk/websocket`(LOGIN token→REG 0B→REAL, PING echo).
+- **결정:** D-007=자체구현(kiwoom-client 참조), D-011=동기 REST + 스레드 WebSocket.
+- **구현:** `engine/src/broker/` — errors.py, models.py(Order/Position/Balance/enums), base.py(BrokerAdapter 동기), kiwoom.py(KiwoomRestBroker: 토큰관리·레이트리밋·재시도·주문/잔고/현재가/미체결·WS 스레드), __init__.py(create_broker 팩토리).
+- **테스트:** test_broker.py 신규(순수유틸+HTTP mock 주문/잔고/현재가/취소/실시간파싱). **총 85개 통과.**
+- **라이브 검증(읽기전용, 사용자 .env):** `it_kiwoom.py` → 토큰OK, 잔고 5천만(모의), 현재가 005930=250,500 조회 성공. 왕복주문(--order)은 사용자 실행 예정.
+- **미결:** candidates 현재가 네이버→키움 교체는 Phase 4 배선. 정정 TR 미검증.
 
 ### 세션 2026-09-01 (Phase 1 분석 로직 이식 완료 ✅)
 - **이식:** breakZone `src/calculator.py` + `fetchers/{kind,pykrx,naver}_fetcher.py` + `ticker_mapping.py` → `engine/src/analysis/`. import 경로만 수정(`from src.fetchers` → `from .`; kind_fetcher 의 미사용 `config` import 제거). 이식 시점 스냅샷으로 고정(양방향 동기화 안 함).

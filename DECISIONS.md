@@ -13,7 +13,8 @@
 | D-004 | 봇 = Python 3.11+ / 백그라운드 푸시 1단계 제외 | 설계기 | ✅ 확정 |
 | D-005 | 현재가 소스 = 키움 실시간 WS(폴백 네이버), 과거종가 pykrx | 2026-08-31 | ✅ 확정 |
 | D-006 | 키움 MCP = 개발 보조. 봇 매매경로는 REST/WS 직접 | 2026-09-01 | ✅ 확정 |
-| D-007 | Phase 2 브로커 구현 방식 (자체 vs kiwoom-client) | 2026-09-01 | ⏳ 보류 |
+| D-007 | Phase 2 브로커 = 자체구현(kiwoom-client 참조) | 2026-09-02 | ✅ 확정 |
+| D-011 | 브로커 동기(requests) REST + 스레드 WebSocket | 2026-09-02 | ✅ 확정 |
 | D-008 | 자동매매 조건은 Phase 4 확정 + 앱 조절 | 2026-09-01 | ⏳ 예정 |
 | D-009 | 문서 관리 체계 = PROGRESS + DECISIONS | 2026-09-01 | ✅ 확정 |
 | D-010 | Python 3.12 설치(3.11+ 요건 충족) | 2026-09-01 | ✅ 확정 |
@@ -51,14 +52,19 @@
 - **근거:** MCP는 LLM 에이전트용 인터페이스 — 24시간 프로그램 매매에 부적합(레이턴시·안정성·주문 미지원). 봇은 결정론적 코드 경로 필요.
 - **부가 이점:** 공식 저장소가 337개 API 스펙 + Postman(306) + `kiwoomcli` + 주문 예제 + 모의 지원 포함 → docs/01 스펙 실측의 **권위 원본**으로 활용. 이전엔 "공식 문서 뒤져 빈칸 채우기"였던 Phase 0 실측이 쉬워짐.
 
-## D-007 · Phase 2 브로커 구현: 자체구현 vs kiwoom-client 래핑 ⏳ 보류
+## D-007 · Phase 2 브로커 = 자체구현 (kiwoom-client 참조) ✅
 - **배경:** `KiwoomRestBroker`(docs/01)를 밑바닥부터 짤지, 기존 Python 래퍼를 쓸지.
-- **선택지:**
-  - (A) **자체구현** — 토큰매니저·주문·WebSocket·레이트리밋·재시도를 직접. 완전한 통제, 의존성 최소.
-  - (B) **`kiwoom-client` 래핑**([younghwan91/kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)) — 주문/잔고/WS/토큰자동갱신/async/`is_mock` 이미 구현, MIT. 단 **스타 0(검증 안 됨)**.
-  - (C) **키움 공식 클라이언트/`kiwoomcli`** 참조·부분 재사용.
-- **잠정 방향:** `BrokerAdapter` 추상화 덕에 어느 쪽이든 전략 코드는 무변경. (B)를 우리 어댑터 안에 감싸면 Phase 2 공수 절감 가능하나, **저품질/미검증 라이브러리 의존 리스크** 존재. **Phase 2 착수 시 공식 저장소 실측 후 결정.**
-- **상태:** 보류. Phase 2에서 확정.
+- **선택지:** (A) 자체구현 / (B) `kiwoom-client` 래핑([younghwan91/kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api), 0-star) / (C) 공식 `kiwoomcli` 재사용.
+- **결정: (A) 자체구현.** 단, 공식 저장소 예제 + kiwoom-client 소스에서 **정확한 스펙을 실측**해 참조(docs/01 표).
+- **근거:** 필요한 엔드포인트가 ~8개 REST + WebSocket 1개로 **표면적이 작다**. 실제 **돈이 오가는 주문 경로**는 완전한 통제가 중요 → 0-star 미검증 라이브러리 의존 회피. deps 최소(requests + websockets). `BrokerAdapter` 추상화로 나중에 교체 가능.
+- **영향:** docs/01 스펙 표를 2026-09-02 실측으로 완성. `broker/kiwoom.py` 를 직접 구현.
+
+## D-011 · 브로커 = 동기(requests) REST + 스레드 WebSocket ✅
+- **배경:** docs/00 §7·docs/03 의사코드는 asyncio(`await broker...`)를 전제. 그러나 필요한 건 소수 REST 호출 + WS 1개.
+- **결정:** 브로커 REST 메서드는 **동기**(`requests`)로 구현. 실시간 시세는 **백그라운드 스레드**에서 WebSocket 수신 → 스레드안전 가격캐시 갱신 + 콜백. (full asyncio 대신)
+- **근거:** 단일 사용자 봇에는 스레드가 더 단순·디버깅 용이. 새 async 의존성(httpx/aiohttp) 불필요. 스모크 테스트의 requests 지식 재사용. 전략 tick 루프도 동기로 단순화 가능(Phase 4).
+- **영향:** docs/01 `BrokerAdapter` 시그니처를 동기로 갱신. Phase 4 매매 루프는 동기 타이머 루프 + 명령/WS는 스레드. 필요 시 나중에 asyncio로 재설계 가능(어댑터 경계 유지).
+- **트레이드오프:** 동시성 고수준 제어는 asyncio가 우수하나, 현 규모에선 과설계. 재검토 트리거: 다수 종목 고빈도 동시처리가 병목이 될 때.
 
 ## D-008 · 자동매매 "조건"은 Phase 4에서 확정 + 앱에서 수치 조절 ⏳ 예정
 - **배경:** 사용자 목표 = "내가 지정한 특정 조건(여러 항목 조합)에 자동매수/매도, 수치는 앱에서 조절". breakZone은 분석/모니터링만 했고 **매매 트리거는 정의된 적 없음**.

@@ -19,19 +19,22 @@
 | 토큰 요청 body | `{"grant_type":"client_credentials","appkey":<key>,"secretkey":<secret>}` (필드명 `secretkey`, appsecret 아님) | | ✅ |
 | 토큰 응답 필드 | `token`, `token_type`, `expires_dt`(yyyyMMddHHmmss), `return_code`, `return_msg` | | ✅ |
 | 토큰 만료 | `expires_dt` 값으로 확인 (스모크 테스트 실행 시 실측) | | ⬜ |
-| 데이터 요청 공통 | `POST`, 헤더 `authorization: Bearer <token>` + `api-id: <TR>` + `Content-Type: application/json;charset=UTF-8`. (데이터 요청엔 appkey 헤더 불필요, 토큰만) | | ✅ |
-| 잔고조회 TR | `kt00018` (계좌평가잔고내역요청), path `/api/dostk/acnt`, body `{"qry_tp","dmst_stex_tp"}` | | ✅ |
+| 데이터 요청 공통 | `POST`, 헤더 `authorization: Bearer <token>` + `api-id: <TR>` + `Content-Type: application/json;charset=UTF-8`. (데이터 요청엔 appkey 헤더 불필요, 토큰만). 연속조회는 응답 헤더 `cont-yn`/`next-key` | | ✅ |
+| 잔고조회 TR | `kt00018` (계좌평가잔고내역요청), path `/api/dostk/acnt`, body `{"qry_tp":"1"(합산)/"2"(개별),"dmst_stex_tp":"KRX"}`. 응답 합계 `prsm_dpst_aset_amt`(추정예탁자산)·`tot_evlt_amt`(총평가금액)·`tot_pur_amt`·`tot_evlt_pl`. 보유목록 `acnt_evlt_remn_indv_tot[]`: `stk_cd,stk_nm,rmnd_qty,pur_pric,cur_prc,evltv_prft` | | ✅ |
+| 현재가 조회 TR | `ka10001` (주식기본정보요청), path `/api/dostk/stkinfo`, body `{"stk_cd"}`. 응답 현재가 `cur_prc` (부호 접두 가능 예 `"+57800"` → 절대값 파싱) | | ✅ |
 | 호가 조회 TR | `ka10004` (주식호가요청), path `/api/dostk/mrkcond`, body `{"stk_cd"}` | | ✅ |
-| 현재가 조회 TR | (mrkcond 도메인 내 별도 TR — 예 ka10001 등, Phase 2 실측) | | ⬜ |
-| 매수/매도/정정/취소 TR | (국내주식 주문 — `examples/국내주식/주문/` 참조) | | ⬜ |
-| 체결/미체결 조회 TR | (`get_domestic_filled_orders` / `get_domestic_unfilled_orders` 참조) | | ⬜ |
-| 실시간 시세 등록 형식 | (WebSocket 로그인 + 등록 메시지 — Phase 2 실측) | | ⬜ |
-| 동시구독 한도 | `______` | | ⬜ |
-| Rate limit | `______` 건/초 | | ⬜ |
+| 매수 TR | `kt10000`, path `/api/dostk/ordr`, body `{"dmst_stex_tp":"KRX","stk_cd","ord_qty","trde_tp","ord_uv","cond_uv"}`. `trde_tp`=`"3"`시장가/`"0"`지정가. `ord_uv`=주문단가(시장가는 `""`). 응답 `ord_no`(주문번호) | | ✅ |
+| 매도 TR | `kt10001`, path/body 매수와 동일 | | ✅ |
+| 취소 TR | `kt10003`, path `/api/dostk/ordr`, body `{"dmst_stex_tp":"KRX","orig_ord_no"(7자리),"stk_cd","cncl_qty"("0"=잔량전부)}` | | ✅ |
+| 정정 TR | `kt10002` (패턴상 — MVP 미사용, 취소+재주문으로 대체) | | ⬜ |
+| 미체결 조회 TR | `ka10075`, path `/api/dostk/acnt`, body `{"all_stk_tp","trde_tp","stex_tp","stk_cd"}`. 응답 `ord_no,oso_qty`(미체결수량)`,stk_cd` | | ✅ |
+| 실시간 WebSocket | URL `wss://mockapi.kiwoom.com:10000/api/dostk/websocket`. LOGIN `{"trnm":"LOGIN","token":<access_token>}`(성공 `return_code==0`). PING 수신 시 **받은 프레임 그대로 echo**. 등록 `{"trnm":"REG","grp_no":"1","refresh":"1","data":[{"item":[codes],"type":["0B"]}]}`. 수신 `trnm:"REAL"` → `data[].{type,item,values}`, 체결타입 `"0B"`, 현재가 `values["10"]`·체결시간 `values["20"]` | | ✅ |
+| 동시구독 한도 | `______` (Phase 2 라이브 실측 — 우선 watchlist 상한 관리) | | ⬜ |
+| Rate limit | `______` 건/초 (공식 문서 확인 전 보수적 토큰버킷 5/s 적용) | | ⬜ |
 
-> **출처/재현:** 공식 저장소 `Kiwoom-Securities/Kiwoom-REST-API` 의 `examples/OAuth 인증/접근토큰발급/create_access_token.py`, `examples/국내주식/시세/`, `examples/국내주식/계좌/` + Python 래퍼 `younghwan91/kiwoom-rest-api`(`src/kiwoom_rest_api/auth.py`, `base.py`). Postman 컬렉션(306 요청)도 참조.
-> **국내 TR 경로 규칙:** 국내주식 데이터 요청은 도메인별 path — 계좌=`/api/dostk/acnt`, 시세/호가=`/api/dostk/mrkcond`, 주문=`/api/dostk/...` — 에 `api-id` 헤더로 TR 코드를 지정하는 방식(POST).
-> 스모크 테스트 스크립트: [`engine/tools/check_kiwoom_token.py`](../engine/tools/check_kiwoom_token.py) — 토큰 발급 + kt00018 잔고조회 확인.
+> **출처/재현(2026-09-01 실측):** 공식 저장소 `Kiwoom-Securities/Kiwoom-REST-API` — `examples/국내주식/주문/{buy,sell,cancel}_domestic_stock*.py`, `종목정보/get_domestic_stock_info.py`, `계좌/{get_domestic_account_evaluation_balance,get_domestic_unfilled_orders}.py`, `실시간시세/subscribe_domestic_stock_trade_*.py` + Python 래퍼 `younghwan91/kiwoom-rest-api`(`auth.py`, `websocket.py`). Postman 컬렉션(306)도 참조.
+> **국내 TR 경로 규칙:** 도메인별 path — 계좌=`/api/dostk/acnt`, 시세=`/api/dostk/mrkcond`, 종목정보=`/api/dostk/stkinfo`, 주문=`/api/dostk/ordr` — 에 `api-id` 헤더로 TR 지정(POST).
+> 스모크 테스트: [`engine/tools/check_kiwoom_token.py`](../engine/tools/check_kiwoom_token.py). Phase 2 통합 테스트: [`engine/tools/it_kiwoom.py`](../engine/tools/it_kiwoom.py).
 
 ---
 

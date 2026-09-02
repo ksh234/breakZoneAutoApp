@@ -9,8 +9,8 @@ finance-datareader>=0.9.50
 holidays>=0.40
 pandas>=2.0
 
-# ── Phase 2~ (브로커/실시간) ──
-# websockets>=12.0        # 키움 실시간 시세 WebSocket
+# Phase 2: 키움 브로커 (실시간 시세 WebSocket)
+websocket-client>=1.7
 
 # ── Phase 3~ (Supabase 중계) ──
 # supabase>=2.4
