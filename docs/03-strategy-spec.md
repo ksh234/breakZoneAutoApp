@@ -34,26 +34,53 @@
 
 ## 2. 매매 규칙 (파라미터화)
 
-### ⚠️ 미확정: 진입/청산의 "정확한 조건과 임계값"은 사용자 트레이딩 노하우 + 백테스트로 확정해야 한다.
-아래는 **엔진 골격과 placeholder 기본값**이다. breakZone은 "분석/모니터링"만 했고 **매매 트리거는 정의된 적이 없다.** Phase 6에서 반드시 사용자와 규칙을 확정하고 이 문서를 갱신한다.
+### 2.0 사용자 확정 전략 (2026-09-02, D-013) — 초안, 수치 전부 조절 가능
+> breakZone은 "분석"만 했다. 매매 규칙은 **사용자 트레이딩 노하우**로 아래와 같이 정의한다.
+> **모든 수치는 `settings`(앱에서 조절 가능). 임계값은 Phase 6 백테스트로 튜닝.**
+> ⚠️ 일부 항목은 Claude 해석/기본값 — "확인필요" 표기. 개발하며 상세화(사용자 방침).
 
-### 2.1 진입 규칙 (`strategy/rules.py::should_enter`)
-순수 함수: `(candidate, price, settings, portfolio_ctx) -> EnterDecision`.
-placeholder 기본 조건(모두 AND):
-1. `candidate.status in ('ok','partial')` 이고 `release_amount` 존재.
-2. `entry_drop_min <= drop_ratio <= entry_drop_max`  ← **핵심 임계값, 백테스트로 결정.**
-3. 오늘이 해제판단일 관련 유효 구간(예: 해제판단일 이전 K매매일 이내) ← 파라미터.
-4. 미보유 종목이고 `positions_cnt < max_positions`.
-5. 리스크 통과(§3).
-→ 매수수량 = `floor(min(per_trade_krw, cash) / price)`, 지정가/시장가 정책(파라미터).
+#### Envelope 지표 (신규 — 진입·청산에 사용)
+- 일봉 종가 기준 이동평균 밴드. `MA = SMA(env_period)`, `상단 = MA×(1+env_band)`, `하단 = MA×(1−env_band)`.
+- 파라미터 `env_period`(기본 20), `env_band`(기본 0.10 = ±10%) ← **확인필요**(사용자가 쓰던 값).
+- 과거종가는 pykrx로 조회(현재가 계산과 별개, candidates OHLCV 재사용 가능).
 
-### 2.2 청산 규칙 (`strategy/rules.py::should_exit`)
-`(position, price, settings, today_ctx) -> ExitDecision(reason)`:
-1. **익절:** `pnl_pct >= take_profit_pct`.
-2. **손절:** `pnl_pct <= stop_loss_pct`.
-3. **시간청산:** 보유가 해제판단일 도달 or D+N 경과(파라미터).
-4. **트레일링/부분청산:** (선택, 확장) `extra` 파라미터.
-5. **강제:** kill-switch / daily_max_loss 도달 시 전량.
+### 2.1 진입(매수) 규칙 (`strategy/rules.py::should_enter`)
+순수 함수: `(candidate, price, env, position_state, settings, portfolio_ctx) -> EnterDecision`.
+
+**E1 · 신규 진입** (모두 AND):
+1. `entry_drop_min ≤ drop_ratio ≤ entry_drop_max` (기본 **30~40**: 현재가가 해제금액보다 30~40% 낮음)
+2. `price < env_lower` (현재가가 envelope 하단 아래)
+3. `candidate.status == 'ok'`(신뢰가능) 이고 미보유, `positions_cnt < max_positions`
+4. 리스크 통과(§3)
+→ **분할매수**: 1회 매수액 = `per_stock_krw × entry_split_pct`(기본 100만 × **30%** = 30만). 최대 `max_entries`회(기본 **4**).
+
+**E2 · 추가매수(물타기)** — 보유 중:
+- `price ≤ avg_price × (1 − add_on_drop_pct)` (평단 대비 **5~10%** 하락, 기본 7%) 이고 `entries_done < max_entries`
+- → 1회분(`per_stock_krw × entry_split_pct`) 추가매수. (사용자 수동 추가매수도 허용 — 자동 규칙과 별개로 앱에서)
+
+### 2.2 청산(매도) 규칙 (`strategy/rules.py::should_exit`)
+`(position, price, env, position_state, settings) -> ExitDecision(reason, portion)`:
+
+**X1 · 분할익절 시작** (아직 분할매도 안 한 상태, AND):
+1. `price > env_upper` (현재가가 envelope 상단 위)
+2. `pnl_pct ≥ take_profit_pct` (기본 **15%**)
+→ 보유수량의 `first_sell_portion`(기본 **50%**) 매도. `partial_sold=True`, 이후 고점 추적 시작.
+
+**X2 · 하락 전량매도** — `partial_sold` 이후:
+- `price ≤ ref × (1 − post_sell_stop_pct)` (기본 **5%** 하락) → **잔량 전량매도**.
+- `ref` = 분할매도 후 **고점**(트레일링) 기준. ← **확인필요**(고점 대비 vs 첫매도가 대비).
+
+**X3 · 상한가 전량매도** — `partial_sold` 이후:
+- 현재가가 당일 **상한가(+30%)** 도달 → **잔량 전량매도**.
+
+**X4 · 강제** (최우선): kill-switch / `daily_max_loss` 도달 → 전량 시장가 청산.
+
+> 전량매도 조건(X2·X3)의 수치·기준은 사용자가 조절 가능(예시로 적은 값).
+
+### 2.2b 포지션 전략상태 (엔진 로컬 추적 — 브로커 잔고 외 추가)
+분할매수/매도 규칙에 필요한 종목별 상태:
+- `entries_done`(분할매수 횟수), `partial_sold`(첫 분할매도 여부), `peak_since_partial`(분할매도 후 고점).
+- 봇 메모리 + Supabase(`positions` 확장 또는 별도)로 유지, 재시작 시 복원(브로커 잔고 기준 재구성).
 
 ### 2.3 신호(signal) 매핑 — 앱 표시용
 후보/보유를 `none|watch|enter|hold|exit` 로 태깅해 `candidates.signal`·이벤트로 반영(앱에서 색상 강조).
@@ -119,18 +146,28 @@ async def tick():
 
 ## 6. 파라미터 목록(설정 항목) — `settings` 테이블과 일치
 
-| 파라미터 | 의미 | 기본(placeholder) |
+| 파라미터 | 의미 | 기본값 |
 |---|---|---|
-| `enabled` | 자동 진입 on/off | false |
+| `enabled` | 자동매매 on/off | false |
 | `mode` | demo/real | demo |
-| `entry_drop_min/max` | 진입 하락비율 구간 | **미정(백테스트)** |
-| `per_trade_krw` | 1회 매수금액 | 1,000,000 |
+| `env_period` | envelope 이동평균 기간(일) | 20 (확인필요) |
+| `env_band` | envelope 밴드 비율(±) | 0.10 (확인필요) |
+| `entry_drop_min` | 진입 하락비율 하한 | 30 |
+| `entry_drop_max` | 진입 하락비율 상한 | 40 |
+| `per_stock_krw` | 종목당 총 투자예정액 | 1,000,000 |
+| `entry_split_pct` | 1회 매수 비중(총액 대비) | 0.30 |
+| `max_entries` | 최대 분할매수 횟수 | 4 |
+| `add_on_drop_pct` | 추가매수 트리거(평단 대비 하락) | 0.07 (5~10%) |
 | `max_positions` | 최대 보유종목수 | 5 |
-| `take_profit_pct` | 익절 % | 10 |
-| `stop_loss_pct` | 손절 % | -5 |
+| `take_profit_pct` | 분할익절 시작 수익률 % | 15 |
+| `first_sell_portion` | 첫 분할매도 비중 | 0.50 |
+| `post_sell_stop_pct` | 분할매도 후 하락 전량매도 기준 | 0.05 |
+| `post_sell_stop_ref` | 위 기준점 (peak/first_sell) | peak (확인필요) |
+| `sell_all_on_limit_up` | 상한가 시 전량매도 | true |
 | `daily_max_loss_krw` | 일 손실 상한 | 500,000 |
-| `hold_days_max` / 진입 유효구간 K | 보유/진입 타이밍 | 미정 |
-| `order_type` | 시장가/지정가 | 미정 |
-| `tick_seconds` | 규칙 평가 주기 | 5 |
+| `order_type` | 시장가/지정가 | limit (확인필요) |
+| `tick_seconds` | 규칙 평가 주기(초) | 5 |
+
+> 신규 파라미터가 많아 `settings` 컬럼 대신 우선 **`settings.extra` jsonb** 에 담아 유연하게 운용(안정화되면 컬럼 승격). 앱 설정화면(Phase 5)에서 편집.
 
 `extra jsonb` 로 트레일링/부분청산 등 확장 파라미터 수용.
