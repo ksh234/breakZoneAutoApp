@@ -9,8 +9,10 @@
 
 | 주체 | 키 | 권한 |
 |---|---|---|
-| 봇(engine) | `service_role` | 전체 읽기/쓰기(RLS 우회). 서버에서만 보관 |
-| 앱(Flutter) | `anon` + 로그인 세션 | RLS 하에서 본인 데이터만 |
+| 봇(engine) | **secret key**(`sb_secret_…`, legacy `service_role` 대체) | 전체 읽기/쓰기(RLS 우회). 서버에서만 보관 |
+| 앱(Flutter) | **publishable key**(`sb_publishable_…`, legacy `anon` 대체) + 로그인 세션 | RLS 하에서 본인 데이터만 |
+
+> **키 체계(2026):** Supabase 신규 키 = publishable(공개용)/secret(서버용). legacy anon/service_role 는 2026말 폐기 예정이나 병행 동작. 신규 프로젝트는 신규 키 사용. env 명: 봇 `SUPABASE_SECRET_KEY`, 앱 publishable.
 
 단일 사용자지만 `owner uuid = auth.uid()` 패턴으로 RLS를 걸어 앱 키 노출에 대비. 봇은 service_role이라 owner를 직접 세팅.
 

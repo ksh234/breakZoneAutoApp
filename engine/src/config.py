@@ -20,8 +20,9 @@ KIWOOM_SECRET = _get("KIWOOM_SECRET")
 KIWOOM_ACCOUNT_NO = _get("KIWOOM_ACCOUNT_NO")
 
 # ── Supabase ──
+# 봇은 secret key(sb_secret_…, 신규) 권장. legacy service_role 도 폴백 지원(2026말 폐기).
 SUPABASE_URL = _get("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = _get("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_SECRET_KEY = _get("SUPABASE_SECRET_KEY") or _get("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_OWNER_UUID = _get("SUPABASE_OWNER_UUID")
 
 # ── 기타 ──

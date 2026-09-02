@@ -36,7 +36,7 @@ python tools/check_kiwoom_token.py
 **사용자(🙋) 할 일 — 두 가지 (순서 무관):**
 
 *(A) Supabase 연결 (Phase 3 라이브 검증)*
-1. Supabase 프로젝트에서 `SUPABASE_URL` / `service_role` 키 / 사용자 UID(`SUPABASE_OWNER_UUID`) 확보 → `engine\.env` 에 입력
+1. `SUPABASE_URL`(Settings>Data API>Project URL) / **secret key**(`sb_secret_…`, service_role 대체) / 사용자 UID(`SUPABASE_OWNER_UUID`) → `engine\.env`(`SUPABASE_SECRET_KEY`)
 2. 마이그레이션 적용: 대시보드 **SQL Editor** 에 `supabase/migrations/0001_init.sql` → `0002_rls.sql` → `0003_realtime.sql` 순서로 붙여넣고 각각 Run
 3. 확인: `.\.venv\Scripts\python.exe tools\check_supabase.py` → "중계 동작 확인" + 대시보드 Table editor 에 bot_state/candidates/events 행 생성
 

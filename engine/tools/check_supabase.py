@@ -31,12 +31,12 @@ def main() -> int:
     args = ap.parse_args()
 
     try:
-        config.require("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_OWNER_UUID")
+        config.require("SUPABASE_URL", "SUPABASE_SECRET_KEY", "SUPABASE_OWNER_UUID")
     except RuntimeError as e:
         print(f"[오류] {e}")
         return 1
 
-    relay = Relay(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, config.SUPABASE_OWNER_UUID)
+    relay = Relay(config.SUPABASE_URL, config.SUPABASE_SECRET_KEY, config.SUPABASE_OWNER_UUID)
     print(f"● owner={config.SUPABASE_OWNER_UUID[:8]}…  url={config.SUPABASE_URL}")
 
     print("[1] 싱글턴 보장(settings/bot_state)…")
