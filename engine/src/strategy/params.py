@@ -26,6 +26,7 @@ class StrategyParams:
     first_sell_portion: float = 0.50
     post_sell_stop_pct: float = 0.05
     sell_all_on_limit_up: bool = True
+    limit_up_pct: float = 29.0     # 분할매도 후 전일종가 대비 +이 % 이상이면 전량매도(예 29≈상한가)
     # 리스크/운영
     daily_max_loss_krw: int = 500_000
     order_type: str = "limit"      # limit | market

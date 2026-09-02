@@ -24,7 +24,6 @@ from .state import PositionState
 
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
-LIMIT_UP_RATIO = 1.295  # 상한가 근사(전일 종가 대비 +29.5%↑)
 
 
 class StrategyEngine:
@@ -282,7 +281,7 @@ class StrategyEngine:
         if not self.params.sell_all_on_limit_up:
             return False
         pc = self.prev_close.get(code)
-        return bool(pc and price >= pc * LIMIT_UP_RATIO)
+        return bool(pc and price >= pc * (1 + self.params.limit_up_pct / 100))
 
     def _maybe_daily_reset(self, now: datetime) -> None:
         d = now.date()

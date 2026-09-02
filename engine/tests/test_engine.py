@@ -99,6 +99,16 @@ def test_paused_no_trade(_mock_market):
     assert not broker.place_order.called
 
 
+def test_at_limit_up_uses_param():
+    e = _engine(_broker())
+    e.prev_close = {"005930": 10000}
+    e.params = StrategyParams(enabled=True, limit_up_pct=28)
+    assert e._at_limit_up("005930", 12800)      # +28% → 전량매도 트리거
+    assert not e._at_limit_up("005930", 12700)  # +27% → 아직
+    e.params = StrategyParams(enabled=True, limit_up_pct=28, sell_all_on_limit_up=False)
+    assert not e._at_limit_up("005930", 13000)  # 기능 off
+
+
 def test_handle_command_kill_sells_all():
     pos = Position(code="005930", name="삼성전자", qty=100, avg_price=10000, current_price=9000)
     broker = _broker(positions=[pos])

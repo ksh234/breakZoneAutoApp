@@ -71,8 +71,8 @@
 - `price ≤ peak_since_partial × (1 − post_sell_stop_pct)` (기본 **5%** 하락) → **잔량 전량매도**.
 - 기준 = 분할매도 후 **고점**(트레일링). 2026-09-02 확정.
 
-**X3 · 상한가 전량매도** — `partial_sold` 이후:
-- 현재가가 당일 **상한가(+30%)** 도달 → **잔량 전량매도**.
+**X3 · 급등 전량매도** — `partial_sold` 이후:
+- 현재가가 전일종가 대비 **+`limit_up_pct`%**(기본 29≈상한가, 조절 가능 예 28) 이상 → **잔량 전량매도**. `sell_all_on_limit_up`로 on/off.
 
 **X4 · 강제** (최우선): kill-switch / `daily_max_loss` 도달 → 전량 시장가 청산.
 
@@ -165,7 +165,8 @@ async def tick():
 | `first_sell_portion` | 첫 분할매도 비중 | 0.50 |
 | `post_sell_stop_pct` | 분할매도 후 하락 전량매도 기준 | 0.05 |
 | `post_sell_stop_ref` | 위 기준점 | peak (분할매도후 고점) |
-| `sell_all_on_limit_up` | 상한가 시 전량매도 | true |
+| `sell_all_on_limit_up` | 급등 전량매도 사용 on/off | true |
+| `limit_up_pct` | 급등 전량매도 기준(전일종가 대비 %) | 29 |
 | `daily_max_loss_krw` | 일 손실 상한 | 500,000 |
 | `order_type` | 시장가/지정가 | limit(지정가) |
 | `tick_seconds` | 규칙 평가 주기(초) | 5 |
