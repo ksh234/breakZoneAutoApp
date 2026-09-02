@@ -186,43 +186,44 @@ class TestRisk:
     def test_ok_buy_happy(self):
         r = ok_buy(qty=30, price=9000, params=_params(), cash=1_000_000,
                    positions_cnt=0, holding=False, invested_krw=0,
-                   pending_same_dir=False, daily_realized_pnl=0)
+                   pending_same_dir=False, unrealized_pnl=0)
         assert r.ok
 
     def test_buy_cash_short(self):
         r = ok_buy(qty=30, price=9000, params=_params(), cash=100_000,
                    positions_cnt=0, holding=False, invested_krw=0,
-                   pending_same_dir=False, daily_realized_pnl=0)
+                   pending_same_dir=False, unrealized_pnl=0)
         assert not r.ok and "현금" in r.reason
 
     def test_buy_budget_exceed(self):
         r = ok_buy(qty=50, price=9000, params=_params(per_stock_krw=300_000),
                    cash=1_000_000, positions_cnt=0, holding=False,
-                   invested_krw=0, pending_same_dir=False, daily_realized_pnl=0)
+                   invested_krw=0, pending_same_dir=False, unrealized_pnl=0)
         assert not r.ok and "예산" in r.reason
 
     def test_buy_max_positions(self):
         r = ok_buy(qty=1, price=9000, params=_params(max_positions=5), cash=1_000_000,
                    positions_cnt=5, holding=False, invested_krw=0,
-                   pending_same_dir=False, daily_realized_pnl=0)
+                   pending_same_dir=False, unrealized_pnl=0)
         assert not r.ok
 
     def test_buy_duplicate(self):
         r = ok_buy(qty=1, price=9000, params=_params(), cash=1_000_000,
                    positions_cnt=0, holding=False, invested_krw=0,
-                   pending_same_dir=True, daily_realized_pnl=0)
+                   pending_same_dir=True, unrealized_pnl=0)
         assert not r.ok and "중복" in r.reason
 
-    def test_buy_daily_loss_halt(self):
-        r = ok_buy(qty=1, price=9000, params=_params(daily_max_loss_krw=500_000),
+    def test_buy_unrealized_loss_halt(self):
+        # 보유 평가손실이 한도 도달 → 신규매수 중단
+        r = ok_buy(qty=1, price=9000, params=_params(max_unrealized_loss_krw=500_000),
                    cash=1_000_000, positions_cnt=0, holding=False, invested_krw=0,
-                   pending_same_dir=False, daily_realized_pnl=-500_000)
-        assert not r.ok and "손실" in r.reason
+                   pending_same_dir=False, unrealized_pnl=-500_000)
+        assert not r.ok and "평가손실" in r.reason
 
     def test_buy_price_sanity(self):
         r = ok_buy(qty=1, price=14000, params=_params(), cash=1_000_000,
                    positions_cnt=0, holding=False, invested_krw=0,
-                   pending_same_dir=False, daily_realized_pnl=0, prev_close=10000)
+                   pending_same_dir=False, unrealized_pnl=0, prev_close=10000)
         assert not r.ok and "sanity" in r.reason  # +40% > ±30%
 
     def test_ok_sell(self):

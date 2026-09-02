@@ -22,10 +22,10 @@ class RiskResult:
 def ok_buy(
     *, qty: int, price: int, params: StrategyParams, cash: int,
     positions_cnt: int, holding: bool, invested_krw: int,
-    pending_same_dir: bool, daily_realized_pnl: int,
+    pending_same_dir: bool, unrealized_pnl: int,
     prev_close: Optional[int] = None,
 ) -> RiskResult:
-    """매수 주문 리스크 검사."""
+    """매수 주문 리스크 검사. unrealized_pnl=보유 전체 평가손익(음수=평가손실)."""
     if qty <= 0:
         return RiskResult(False, "수량 0 이하")
     amount = qty * price
@@ -37,8 +37,8 @@ def ok_buy(
         return RiskResult(False, f"최대 보유종목수({params.max_positions}) 도달")
     if pending_same_dir:
         return RiskResult(False, "동일종목 매수 미체결 주문 존재(중복주문 차단)")
-    if daily_realized_pnl <= -params.daily_max_loss_krw:
-        return RiskResult(False, f"일 손실 상한({params.daily_max_loss_krw:,}) 도달 — 신규진입 중단")
+    if unrealized_pnl <= -params.max_unrealized_loss_krw:
+        return RiskResult(False, f"평가손실 한도({params.max_unrealized_loss_krw:,}) 도달 — 신규진입 중단")
     if prev_close and prev_close > 0:
         if price > prev_close * (1 + PRICE_LIMIT_PCT) or price < prev_close * (1 - PRICE_LIMIT_PCT):
             return RiskResult(False, f"가격 sanity 이탈(현재가 {price:,} vs 전일 {prev_close:,})")

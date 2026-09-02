@@ -27,7 +27,7 @@ class StrategyParams:
     sell_all_on_limit_up: bool = True
     limit_up_pct: float = 29.0     # 분할매도 후 전일종가 대비 +이 % 이상이면 전량매도(예 29≈상한가)
     # 리스크/운영
-    daily_max_loss_krw: int = 500_000
+    max_unrealized_loss_krw: int = 500_000   # 보유 평가손실이 이 금액 이상이면 신규매수 중단(하락장 방어)
     order_type: str = "limit"      # limit | market
     tick_seconds: int = 5
 

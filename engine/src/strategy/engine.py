@@ -41,6 +41,7 @@ class StrategyEngine:
         self.day_realized_pnl = 0
         self._day = None
         self._subscribed: set[str] = set()
+        self._entry_blocked = False
 
     # ── 수명주기 / 명령 ───────────────────────────────
     def load_params(self) -> None:
@@ -173,11 +174,25 @@ class StrategyEngine:
                 continue
             self._sell(pos, d, price)
 
+    def _unrealized_pnl(self) -> int:
+        """보유 전체 평가손익(음수=평가손실). 실시간가 우선, 없으면 잔고상 현재가."""
+        total = 0
+        for code, pos in self.positions.items():
+            price = self._price(code) or pos.current_price
+            total += (price - pos.avg_price) * pos.qty
+        return total
+
     def _evaluate_entries(self, pending: set[str]) -> None:
         if not self.params.enabled:
             return
-        if self.day_realized_pnl <= -self.params.daily_max_loss_krw:
+        unrealized = self._unrealized_pnl()
+        if unrealized <= -self.params.max_unrealized_loss_krw:
+            if not self._entry_blocked:  # 전환 시 1회만 알림(스팸 방지)
+                self._emit("risk_block", "warn", "신규매수 중단",
+                           f"평가손실 {unrealized:,} ≤ 한도 -{self.params.max_unrealized_loss_krw:,}")
+            self._entry_blocked = True
             return
+        self._entry_blocked = False
         try:
             cash = self.broker.get_balance().cash
         except BrokerError:
@@ -199,7 +214,7 @@ class StrategyEngine:
             r = ok_buy(qty=d.qty, price=price, params=self.params, cash=cash,
                        positions_cnt=len(self.positions), holding=holding,
                        invested_krw=st.invested_krw, pending_same_dir=code in pending,
-                       daily_realized_pnl=self.day_realized_pnl, prev_close=self.prev_close.get(code))
+                       unrealized_pnl=unrealized, prev_close=self.prev_close.get(code))
             if not r.ok:
                 self._emit("risk_block", "warn", "매수 차단", f"{cand.name}: {r.reason}")
                 continue

@@ -8,7 +8,7 @@ const _specs = <(String, String, String, bool, num)>[
   // 기본 설정
   ('기본 설정', 'min_price', '최소 매수가(원)', true, 1000),
   ('기본 설정', 'max_positions', '최대 보유종목수', true, 5),
-  ('기본 설정', 'daily_max_loss_krw', '일 손실 상한(원)', true, 500000),
+  ('기본 설정', 'max_unrealized_loss_krw', '평가손실 매수중단 한도(원) — 보유 평가손실이 이만큼이면 신규매수 중단', true, 500000),
   ('기본 설정', 'tick_seconds', '평가 주기(초)', true, 5),
   // 매수 설정
   ('매수 설정', 'entry_drop_pct', '진입 하락비율 기준(%) — 해제가 대비 이 % 이상 하락 시 매수', false, 30),
