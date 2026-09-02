@@ -1,0 +1,102 @@
+"""진입/청산 규칙 — 순수 함수(외부 의존 0). docs/03 §2. 100% 단위테스트 대상.
+
+전략 수치는 StrategyParams 로 주입 → 앱에서 조절 가능.
+외부 데이터(현재가·envelope·상한가여부)는 인자로 받고, 여기선 판정만 한다.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+from .indicators import Envelope
+from .params import StrategyParams
+from .state import PositionState
+
+
+@dataclass
+class EnterDecision:
+    enter: bool
+    qty: int = 0
+    kind: str = ""      # 'new' | 'add'
+    note: str = ""
+
+
+@dataclass
+class ExitDecision:
+    exit: bool
+    qty: int = 0
+    reason: str = ""    # 'take_profit_partial' | 'trailing_stop' | 'limit_up'
+    mark_partial_sold: bool = False
+    note: str = ""
+
+
+def _no_enter(note: str) -> EnterDecision:
+    return EnterDecision(False, note=note)
+
+
+def should_enter(
+    *, drop_ratio: Optional[float], status: str, price: Optional[int],
+    env: Optional[Envelope], params: StrategyParams, state: PositionState,
+    holding: bool, avg_price: Optional[int], positions_cnt: int, cash: int,
+) -> EnterDecision:
+    """매수 판정. 신규 진입(E1) 또는 추가매수/물타기(E2)."""
+    if not params.enabled:
+        return _no_enter("자동매매 off")
+    if not price or price <= 0 or env is None:
+        return _no_enter("시세/envelope 없음")
+
+    # 분할매수 예산·횟수 상한
+    remaining = params.per_stock_krw - state.invested_krw
+    if remaining <= 0 or state.entries_done >= params.max_entries:
+        return _no_enter("종목 예산/횟수 소진")
+    one = min(params.one_buy_krw(), remaining, cash)
+    qty = one // price
+    if qty < 1:
+        return _no_enter("주문가능수량 0(현금/예산 부족)")
+
+    if not holding:
+        # E1 · 신규 진입
+        if status != "ok":
+            return _no_enter(f"status={status}")
+        if drop_ratio is None:
+            return _no_enter("drop_ratio 없음")
+        if not (params.entry_drop_min <= drop_ratio <= params.entry_drop_max):
+            return _no_enter(f"drop_ratio {drop_ratio} 구간 밖")
+        if not (price < env.lower):
+            return _no_enter("현재가가 envelope 하단 위")
+        if positions_cnt >= params.max_positions:
+            return _no_enter("최대 보유종목수 도달")
+        return EnterDecision(True, qty, "new", "신규진입")
+
+    # E2 · 추가매수(물타기): 평단 대비 add_on_drop_pct 하락
+    if avg_price and price <= avg_price * (1 - params.add_on_drop_pct):
+        return EnterDecision(True, qty, "add", f"평단대비 {params.add_on_drop_pct:.0%} 하락")
+    return _no_enter("추가매수 조건 미충족")
+
+
+def should_exit(
+    *, qty: int, avg_price: Optional[int], price: Optional[int],
+    env: Optional[Envelope], params: StrategyParams, state: PositionState,
+    at_limit_up: bool = False,
+) -> ExitDecision:
+    """매도 판정. 분할익절(X1) 시작 → 이후 트레일링(X2)/상한가(X3) 전량."""
+    if qty <= 0 or not price or price <= 0:
+        return ExitDecision(False, note="시세/수량 없음")
+    pnl_pct = (price / avg_price - 1) * 100 if avg_price else 0.0
+
+    if not state.partial_sold:
+        # X1 · 분할익절 시작
+        if env is not None and price > env.upper and pnl_pct >= params.take_profit_pct:
+            sell_qty = max(1, int(qty * params.first_sell_portion))
+            return ExitDecision(True, sell_qty, "take_profit_partial", mark_partial_sold=True,
+                                note=f"+{pnl_pct:.1f}% & env상단 돌파")
+        return ExitDecision(False, note="익절 조건 미충족")
+
+    # 분할매도 이후: 잔량 전량 청산 트리거
+    if params.sell_all_on_limit_up and at_limit_up:
+        return ExitDecision(True, qty, "limit_up", note="상한가 전량")
+    peak = state.peak_since_partial or price
+    if price <= peak * (1 - params.post_sell_stop_pct):
+        return ExitDecision(True, qty, "trailing_stop",
+                            note=f"고점 {peak} 대비 -{params.post_sell_stop_pct:.0%}")
+    return ExitDecision(False, note="보유 유지")

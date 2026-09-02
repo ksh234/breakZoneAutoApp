@@ -41,7 +41,7 @@
 
 #### Envelope 지표 (신규 — 진입·청산에 사용)
 - 일봉 종가 기준 이동평균 밴드. `MA = SMA(env_period)`, `상단 = MA×(1+env_band)`, `하단 = MA×(1−env_band)`.
-- 파라미터 `env_period`(기본 20), `env_band`(기본 0.10 = ±10%) ← **확인필요**(사용자가 쓰던 값).
+- 파라미터 `env_period`=20, `env_band`=0.10(±10%) (2026-09-02 사용자 확정, 조절 가능).
 - 과거종가는 pykrx로 조회(현재가 계산과 별개, candidates OHLCV 재사용 가능).
 
 ### 2.1 진입(매수) 규칙 (`strategy/rules.py::should_enter`)
@@ -52,7 +52,7 @@
 2. `price < env_lower` (현재가가 envelope 하단 아래)
 3. `candidate.status == 'ok'`(신뢰가능) 이고 미보유, `positions_cnt < max_positions`
 4. 리스크 통과(§3)
-→ **분할매수**: 1회 매수액 = `per_stock_krw × entry_split_pct`(기본 100만 × **30%** = 30만). 최대 `max_entries`회(기본 **4**).
+→ **분할매수**: 1회 매수액 = `per_stock_krw × entry_split_pct`(기본 100만 × **30%** = 30만). **누적 매수액이 `per_stock_krw`(종목당 총액)를 넘지 않도록 상한**(2026-09-02 확정) — 30%씩 사되 합계가 총액 도달 시 중단(약 3~4회). `max_entries` 는 보조 상한.
 
 **E2 · 추가매수(물타기)** — 보유 중:
 - `price ≤ avg_price × (1 − add_on_drop_pct)` (평단 대비 **5~10%** 하락, 기본 7%) 이고 `entries_done < max_entries`
@@ -67,8 +67,8 @@
 → 보유수량의 `first_sell_portion`(기본 **50%**) 매도. `partial_sold=True`, 이후 고점 추적 시작.
 
 **X2 · 하락 전량매도** — `partial_sold` 이후:
-- `price ≤ ref × (1 − post_sell_stop_pct)` (기본 **5%** 하락) → **잔량 전량매도**.
-- `ref` = 분할매도 후 **고점**(트레일링) 기준. ← **확인필요**(고점 대비 vs 첫매도가 대비).
+- `price ≤ peak_since_partial × (1 − post_sell_stop_pct)` (기본 **5%** 하락) → **잔량 전량매도**.
+- 기준 = 분할매도 후 **고점**(트레일링). 2026-09-02 확정.
 
 **X3 · 상한가 전량매도** — `partial_sold` 이후:
 - 현재가가 당일 **상한가(+30%)** 도달 → **잔량 전량매도**.
@@ -150,8 +150,8 @@ async def tick():
 |---|---|---|
 | `enabled` | 자동매매 on/off | false |
 | `mode` | demo/real | demo |
-| `env_period` | envelope 이동평균 기간(일) | 20 (확인필요) |
-| `env_band` | envelope 밴드 비율(±) | 0.10 (확인필요) |
+| `env_period` | envelope 이동평균 기간(일) | 20 |
+| `env_band` | envelope 밴드 비율(±) | 0.10 |
 | `entry_drop_min` | 진입 하락비율 하한 | 30 |
 | `entry_drop_max` | 진입 하락비율 상한 | 40 |
 | `per_stock_krw` | 종목당 총 투자예정액 | 1,000,000 |
@@ -162,10 +162,10 @@ async def tick():
 | `take_profit_pct` | 분할익절 시작 수익률 % | 15 |
 | `first_sell_portion` | 첫 분할매도 비중 | 0.50 |
 | `post_sell_stop_pct` | 분할매도 후 하락 전량매도 기준 | 0.05 |
-| `post_sell_stop_ref` | 위 기준점 (peak/first_sell) | peak (확인필요) |
+| `post_sell_stop_ref` | 위 기준점 | peak (분할매도후 고점) |
 | `sell_all_on_limit_up` | 상한가 시 전량매도 | true |
 | `daily_max_loss_krw` | 일 손실 상한 | 500,000 |
-| `order_type` | 시장가/지정가 | limit (확인필요) |
+| `order_type` | 시장가/지정가 | limit(지정가) |
 | `tick_seconds` | 규칙 평가 주기(초) | 5 |
 
 > 신규 파라미터가 많아 `settings` 컬럼 대신 우선 **`settings.extra` jsonb** 에 담아 유연하게 운용(안정화되면 컬럼 승격). 앱 설정화면(Phase 5)에서 편집.

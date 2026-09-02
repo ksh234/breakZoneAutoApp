@@ -12,10 +12,10 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-02 |
-| **현재 Phase** | **Phase 0~3 완료** → Phase 4(전략 엔진) 준비 |
-| **코드 상태** | analysis + broker + relay + config + 마이그레이션. 테스트 91개. Supabase 중계 **라이브 검증 완료**. |
-| **다음 마일스톤** | Phase 4 — 매매 루프 + ⭐사용자 매매조건 확정(D-008). candidates 현재가 키움 배선(D-005) |
-| **블로커** | 없음. (남은 확인: 키움 왕복주문 `it_kiwoom.py --order` 장중 1회 — Phase 4와 병행 가능) |
+| **현재 Phase** | **Phase 4 진행중** — 전략 순수 코어 완료, 오케스트레이션(engine/main) 남음 |
+| **코드 상태** | analysis+broker+relay+**strategy(rules/risk/indicators/state/params)**. 테스트 120개. 매매전략 D-013 확정(수치 조절가능). |
+| **다음 마일스톤** | `strategy/engine.py`(오케스트레이션) + `main.py`(스케줄러·상태기계) — 분석+브로커+relay+규칙 배선. candidates 현재가 키움化(D-005) |
+| **블로커** | 없음. (남은 확인: 키움 왕복주문 장중 1회) |
 
 ---
 
@@ -86,6 +86,14 @@ cd engine
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-02 (Phase 4 전략 코어 ✅ — 사용자 전략 확정)
+- **사용자 매매전략 확정(D-013):** 매수=하락비율 30~40% AND 현재가<envelope하단 → 분할매수(30%씩, 종목당총액 상한). 평단-7% 물타기. 매도=현재가>envelope상단 AND +15% → 50%익절, 이후 고점-5% 전량, 상한가 전량.
+- **확인받은 기본값:** envelope 20일 ±10%, 분할매수 총액상한, X2 트레일링(고점기준), 주문=지정가.
+- **구현(순수 코어):** `src/strategy/` — params(StrategyParams, settings.extra 로드) · indicators(compute_envelope) · state(PositionState 분할추적) · rules(should_enter E1/E2, should_exit X1/X2/X3) · risk(ok_buy/ok_sell 가드, real클램프 골격).
+- **테스트:** test_strategy.py 29개 — **총 120개 통과.**
+- **남은 Phase 4:** engine.py(오케스트레이션: 후보→규칙→리스크→broker 주문→relay 반영) + main.py(KST 스케줄러·상태기계·commands 처리). candidates 현재가 네이버→키움 배선.
+- docs/03 §2 전략 명세 확정 반영, DECISIONS D-013.
 
 ### 세션 2026-09-02 (Phase 3 Supabase 중계 코드 ✅)
 - **결정:** D-012 = 명령 수신 폴링(스레드, 1.5초), Realtime 후속.
