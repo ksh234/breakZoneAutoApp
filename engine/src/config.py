@@ -21,7 +21,16 @@ KIWOOM_ACCOUNT_NO = _get("KIWOOM_ACCOUNT_NO")
 
 # ── Supabase ──
 # 봇은 secret key(sb_secret_…, 신규) 권장. legacy service_role 도 폴백 지원(2026말 폐기).
-SUPABASE_URL = _get("SUPABASE_URL")
+def _norm_supabase_url(u: str) -> str:
+    """base URL 만 남긴다(끝의 /rest/v1 · 슬래시 제거). 클라이언트가 경로를 붙임."""
+    u = u.strip().rstrip("/")
+    for suffix in ("/rest/v1", "/rest"):
+        if u.endswith(suffix):
+            u = u[: -len(suffix)]
+    return u.rstrip("/")
+
+
+SUPABASE_URL = _norm_supabase_url(_get("SUPABASE_URL"))
 SUPABASE_SECRET_KEY = _get("SUPABASE_SECRET_KEY") or _get("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_OWNER_UUID = _get("SUPABASE_OWNER_UUID")
 
