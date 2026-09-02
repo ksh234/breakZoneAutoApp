@@ -12,10 +12,10 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-02 |
-| **현재 Phase** | **Phase 4 코드 완료** — 오케스트레이션+main 포함. 라이브(장중) 운용 검증 대기 |
-| **코드 상태** | analysis+broker+relay+strategy(rules/risk/indicators/state/params/**engine/main/market**). 테스트 **130개**. 4조각 배선 완료. |
-| **다음 마일스톤** | 장중 라이브 실전(모의) 운용: `python -m src.main` → 앱/commands 'start' → 하루 운용 관찰. 이후 Phase 5(앱). |
-| **블로커** | 없음. (라이브 검증은 장중 필요) |
+| **현재 Phase** | **Phase 5 앱 코드 완료** — 실행/로그인 검증 대기(publishable key) |
+| **코드 상태** | engine(봇) 전체 + **Flutter 앱**(인증·Realtime·대시보드·제어·설정). 봇 테스트 130개, 앱 analyze 클린·web 빌드 성공. |
+| **다음 마일스톤** | 앱 `env.dart` 에 publishable key 입력 → `flutter run` 로그인 → 봇 제어. + 장중 라이브 운용(봇+앱). |
+| **블로커** | 없음. (앱 실행은 publishable key 필요, 라이브 운용은 장중 필요) |
 
 ---
 
@@ -72,6 +72,14 @@ cd engine
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-02 (Phase 5 Flutter 앱 ✅ — 코드 완성)
+- **스캐폴딩:** `flutter create app`(web+android) + supabase_flutter/flutter_riverpod/fl_chart/intl.
+- **구조:** core(env·supabase 클라이언트) · data(models·repos: Realtime StreamProvider + 쓰기) · auth(login) · home(Drawer 네비) · features(dashboard/control/settings/lists).
+- **기능:** Supabase 이메일 로그인 → RLS(owner=auth.uid) 하에 본인 데이터. 대시보드(status·하트비트경과·평가금·현금·당일손익), 후보/포지션/주문/이벤트 실시간 목록, 제어(start/stop/pause/resume/kill 2단계확인 → commands insert), 설정(15개 파라미터 조절 → settings.enabled + extra).
+- **키:** 앱은 publishable key(`sb_publishable_…`) 사용. `env.dart`(gitignore, URL 프리필)에 키만 넣으면 됨. Supabase.initialize 는 publishableKey 파라미터.
+- **검증:** `flutter analyze` 이슈 0, `flutter build web` 성공. (실행/로그인은 사용자 키 입력 후.)
+- **환경:** Flutter `D:\dev\flutter` v3.47.2 사용(PATH 미등록 → 전체경로 호출).
 
 ### 세션 2026-09-02 (Phase 4 오케스트레이션 ✅ — 4조각 배선)
 - **추가 조건:** `min_price`(최소 매수가, 기본 1000, 조절가능) — 신규·추가매수 공통.
