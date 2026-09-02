@@ -12,10 +12,10 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-02 |
-| **현재 Phase** | **Phase 3 코드 완료** → 라이브 검증 대기(사용자 Supabase 키) |
-| **코드 상태** | `broker/` + `relay/`(supabase_client) + `config.py` + supabase 마이그레이션 3종. 테스트 91개 통과. |
-| **다음 마일스톤** | 사용자: Supabase 키 `.env` 입력 + 마이그레이션 적용 → `check_supabase.py` 확인. 그리고 `it_kiwoom.py --order`(장중). 이후 Phase 4(매매 루프) |
-| **블로커** | 없음. 사용자 Supabase 프로젝트 키/마이그레이션 적용 대기 |
+| **현재 Phase** | **Phase 0~3 완료** → Phase 4(전략 엔진) 준비 |
+| **코드 상태** | analysis + broker + relay + config + 마이그레이션. 테스트 91개. Supabase 중계 **라이브 검증 완료**. |
+| **다음 마일스톤** | Phase 4 — 매매 루프 + ⭐사용자 매매조건 확정(D-008). candidates 현재가 키움 배선(D-005) |
+| **블로커** | 없음. (남은 확인: 키움 왕복주문 `it_kiwoom.py --order` 장중 1회 — Phase 4와 병행 가능) |
 
 ---
 
@@ -81,7 +81,7 @@ cd engine
 - [x] 키움 모의 접근토큰 발급 성공(Phase 0 게이트)
 - [x] **Phase 1: breakZone 분석 로직 이식 + `build_candidates()` 라이브 후보 산출(22종목) + 테스트 68개 통과**
 - [x] **Phase 2: 키움 스펙 실측 + `broker/`(BrokerAdapter+KiwoomRestBroker) 구현 + 읽기전용 라이브 검증 + 테스트 85개** (왕복주문 실증은 사용자 대기)
-- [x] **Phase 3: Supabase 마이그레이션(7테이블+RLS+Realtime) + `relay/`(Relay 중계) + config + 테스트 91개** (라이브 검증은 사용자 키 대기)
+- [x] **Phase 3: Supabase 마이그레이션(7테이블+RLS+Realtime) + `relay/`(Relay 중계) + config + 테스트 91개 + 라이브 검증 완료** ✅
 
 ---
 
@@ -93,8 +93,9 @@ cd engine
 - **엔진:** `src/config.py`(env 중앙화, SUPABASE_* 추가), `src/relay/supabase_client.py`(Relay: ensure_singletons·push_bot_state·upsert_candidates/positions·insert_order/event·load_settings·start_command_listener 폴링·ack_command). requirements 에 supabase 추가, .env.example 에 SUPABASE_OWNER_UUID.
 - **테스트:** test_relay.py(supabase 클라이언트 mock, 페이로드 검증) — **총 91개 통과.**
 - **도구:** `tools/check_supabase.py`(스모크: 싱글턴·하트비트·후보 upsert·이벤트·명령 리스너).
-- **미검증(라이브):** 사용자 Supabase 키/마이그레이션 적용 후 check_supabase 로 확인 예정.
-- **사용자 가이드 제공:** Supabase 프로젝트 생성·키 확보·auth 사용자(owner UID) 생성 절차.
+- **라이브 검증 완료(2026-09-02):** 사용자가 마이그레이션 3종 적용 + `.env`(secret key/URL/owner) 입력 후 `check_supabase.py` 성공 — 싱글턴·하트비트·후보 upsert·이벤트·settings 로드 전부 OK. 봇↔Supabase 경로 완성.
+- **키 체계:** Supabase 신규 secret key(`sb_secret_…`) 사용. `SUPABASE_URL` 은 base 만(코드가 /rest/v1 자동 제거).
+- **사용자 가이드 제공:** Supabase 프로젝트 생성·키 확보·auth 사용자(owner UID) 생성·SQL Editor 마이그레이션 적용 절차.
 
 ### 세션 2026-09-02 (Phase 2 브로커 코어 ✅)
 - **키움 스펙 실측 완료** → docs/01 표 채움: 주문 kt10000(매수)/kt10001(매도)/kt10003(취소) path `/api/dostk/ordr`(body dmst_stex_tp/stk_cd/ord_qty/trde_tp/ord_uv, trde_tp 3=시장/0=지정), 현재가 ka10001 `/api/dostk/stkinfo`(cur_prc), 잔고 kt00018(acnt_evlt_remn_indv_tot[]), 미체결 ka10075, WebSocket `/api/dostk/websocket`(LOGIN token→REG 0B→REAL, PING echo).

@@ -202,10 +202,10 @@ breakZoneAutoApp/
 **산출물:** 봇 실행 시 Supabase 대시보드에서 `bot_state` 하트비트가 갱신되고, 수동으로 `commands` 행을 넣으면 봇이 로그로 반응.
 
 **완료 기준**
-- [ ] 모든 테이블·RLS·Realtime 적용됨
-- [ ] 봇이 outbound 연결만으로 state push 성공(인바운드 포트 개방 없음)
-- [ ] `commands` INSERT → 봇 수신 지연 1~2초 내
-- [ ] 네트워크 끊김 후 자동 재연결 + 밀린 상태 재전송
+- [x] 모든 테이블·RLS·Realtime 적용됨 (마이그레이션 3종, 2026-09-02 라이브 확인)
+- [x] 봇이 outbound 연결만으로 state push 성공 (check_supabase.py: 하트비트·후보·이벤트 upsert 확인)
+- [~] `commands` INSERT → 봇 수신 (폴링 1.5초 구현, `--listen` 실증은 사용자 선택 확인)
+- [ ] 네트워크 끊김 후 자동 재연결 + 밀린 상태 재전송 (오프라인 버퍼는 후속 — Phase 4/8에서 보강)
 
 ---
 
