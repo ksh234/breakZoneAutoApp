@@ -88,6 +88,13 @@ class TestShouldEnter:
                          avg_price=None, positions_cnt=0, cash=1_000_000)
         assert not d.enter
 
+    def test_reject_release_passed(self):
+        # 해제일 지난 종목 → 신규매수 제외 (다른 조건 다 맞아도)
+        d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
+                         params=_params(), state=PositionState("x"), holding=False,
+                         avg_price=None, positions_cnt=0, cash=1_000_000, release_passed=True)
+        assert not d.enter
+
     def test_new_reject_partial(self):
         # partial(값 하나라도 누락) → 해제금액/하락비율 부정확 → 매수 금지
         d = should_enter(drop_ratio=35, status="partial", price=9000, env=self._env(),

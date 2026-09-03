@@ -227,6 +227,7 @@ class StrategyEngine:
             cash = self.broker.get_balance().cash
         except BrokerError:
             return
+        today = self._now().date()
         for code, cand in self.candidates.items():
             price = self._price(code)
             if not price:
@@ -234,11 +235,13 @@ class StrategyEngine:
             pos = self.positions.get(code)
             holding = pos is not None and pos.qty > 0
             st = self.states.setdefault(code, PositionState(code))
+            release_passed = cand.release_date is not None and today > cand.release_date
             d = should_enter(
                 drop_ratio=cand.drop_ratio, status=cand.status, price=price,
                 env=self.envelopes.get(code), params=self.params, state=st,
                 holding=holding, avg_price=pos.avg_price if pos else None,
-                positions_cnt=len(self.positions), cash=cash)
+                positions_cnt=len(self.positions), cash=cash,
+                release_passed=release_passed)
             if not d.enter or code in pending:
                 continue
             r = ok_buy(qty=d.qty, price=price, params=self.params, cash=cash,

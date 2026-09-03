@@ -48,6 +48,7 @@
 순수 함수: `(candidate, price, env, position_state, settings, portfolio_ctx) -> EnterDecision`.
 
 **E1 · 신규 진입** (모두 AND):
+0. **매수 유효구간:** 오늘 ≤ 해제일 (해제일이 지난 D+ 종목은 신규·추가매수 제외 — 매수 적기는 T-5~해제일). 보유분은 계속 청산 관리. (2026-09-03)
 1. `drop_ratio ≥ entry_drop_pct` (기본 **30**: 현재가가 해제금액보다 30% 이상 낮음. 많이 떨어질수록 매수 대상 — 상한 없음)
 2. `price < env_lower` (현재가가 envelope 하단 아래)
 3. `price ≥ min_price` (기본 **1000원** — 저가주 필터, 조절 가능. 0=무제한. 신규·추가매수 공통)

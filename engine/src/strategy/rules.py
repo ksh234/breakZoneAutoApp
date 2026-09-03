@@ -38,12 +38,16 @@ def should_enter(
     *, drop_ratio: Optional[float], status: str, price: Optional[int],
     env: Optional[Envelope], params: StrategyParams, state: PositionState,
     holding: bool, avg_price: Optional[int], positions_cnt: int, cash: int,
+    release_passed: bool = False,
 ) -> EnterDecision:
     """매수 판정. 신규 진입(E1) 또는 추가매수/물타기(E2)."""
     if not params.enabled:
         return _no_enter("자동매매 off")
     if not price or price <= 0 or env is None:
         return _no_enter("시세/envelope 없음")
+    # 매수 적기는 해제일 이전(T-5~해제일). 해제일 지난 종목은 신규·추가 매수 제외.
+    if release_passed:
+        return _no_enter("해제일 지남 — 매수 제외")
 
     # 최소 매수가 필터(신규·추가매수 공통). 0 이면 무제한.
     if params.min_price and price < params.min_price:
