@@ -1,0 +1,30 @@
+[Unit]
+Description=breakZone auto-trading bot (Kiwoom demo/real via Supabase relay)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot
+Group=bot
+WorkingDirectory=/opt/breakZoneAutoApp/engine
+# .env 는 코드(python-dotenv)가 engine/.env 에서 읽음. 시크릿은 유닛 파일에 넣지 않는다.
+Environment=TZ=Asia/Seoul
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/breakZoneAutoApp/engine/.venv/bin/python -m src.main
+# Ctrl+C 와 동일하게 안전 종료(락 해제·WS·리스너 정리) 유도
+KillSignal=SIGINT
+TimeoutStopSec=30
+Restart=always
+RestartSec=10
+# 크래시 루프 완화: 5분 내 10회 재시작이면 잠시 멈춤
+StartLimitIntervalSec=300
+StartLimitBurst=10
+# 보안 최소치
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/breakZoneAutoApp/engine
+
+[Install]
+WantedBy=multi-user.target

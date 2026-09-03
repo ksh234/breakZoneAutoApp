@@ -47,14 +47,15 @@ CMD ["python", "-m", "src.main"]
 - 시크릿은 이미지에 넣지 말고 **런타임 환경변수/시크릿**으로 주입.
 - `infra/docker-compose.yml` 로 로컬 재현.
 
-## 4. 클라우드 이관 절차
+## 4. 클라우드 이관 절차 (D-015 · venv+systemd, `infra/server/`)
 
-1. VM 준비: **국내 VPS(카페24/가비아/네이버클라우드)** 또는 **AWS/GCP 서울 리전**. 국내 증권사 API 지연 최소화엔 국내가 유리.
-2. Docker 설치 → 이미지 빌드/실행(또는 레지스트리 경유).
-3. 시크릿 주입(환경변수/시크릿매니저). 실전 키는 여기서만.
-4. 프로세스 관리: `--restart=always`(Docker) 또는 systemd. 크래시/재부팅 자동복구.
-5. **이중 실행 방지:** 집 봇 종료 확인 후 클라우드 봇 시작(docs/05 §4 락).
-6. 검증: 앱·Supabase **무변경**으로 그대로 연동되는지 확인(하트비트·명령 왕복).
+1. VM 준비(사용자): **서울 리전** Ubuntu 22.04/24.04, 1GB+ RAM, 공인 IP. 후보: Oracle Cloud 무료 티어(서울) / AWS Lightsail 서울 / Vultr 서울. KIND 크롤링·키움 API 가 해외 IP 를 막을 수 있어 국내 리전 필수. SSH 개인키는 작업 PC `~/.ssh/` 에만 보관.
+2. 최초 설치(Claude, SSH): `sudo bash infra/server/setup.sh <repo-url>` → python3.12·git, `bot` 시스템 사용자, `/opt/breakZoneAutoApp` clone, venv+deps, systemd 유닛(`breakzone-bot.service`: Restart=always, SIGINT 안전종료, KST) 등록.
+3. 시크릿(`engine/.env`)을 서버에 배치(600, bot 소유). 유닛 파일·이미지·깃에 넣지 않는다. `BOT_HOLDER_ID=cloud-seoul`, `BOT_DRY_RUN=0`.
+4. 스모크: `tools/check_kiwoom_token.py`(키움 토큰·잔고) + `tools/check_supabase.py`(중계) 를 서버에서 실행해 서버 IP 에서 외부 접속이 되는지 확인.
+5. **전환:** 집 PC 봇 종료 → `systemctl start breakzone-bot` → 로그에 "락 획득(cloud-seoul)" + 앱 이벤트 "봇 LIVE" 확인. PC `.env` 는 `BOT_DRY_RUN=1` 로 바꿔 둔다(docs/05 §4).
+6. 검증: 앱·Supabase **무변경**으로 연동(하트비트·시작/정지·설정 반영·후보 표시 왕복).
+7. 재배포: `sudo bash infra/server/deploy.sh` (pull → deps 변경 시 설치 → pytest -x → restart → 로그). **장 마감 후** 원칙. 로그: `journalctl -u breakzone-bot -f`.
 
 ### 이관 시 바뀌는 것 / 안 바뀌는 것
 - **안 바뀜:** 앱, Supabase 스키마/URL, 통신 규약, 브로커 어댑터, 전략 코드.
