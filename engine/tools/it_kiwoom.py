@@ -93,8 +93,15 @@ def _order_roundtrip(broker, price):
     if not price:
         print("    현재가 조회 실패로 주문 스킵")
         return
-    limit = max(1000, (int(price * 0.5) // 100) * 100)  # 현재가 절반 근처, 100원 단위
-    print(f"    매수 지정가 {limit:,}원 x1주 (체결 안 되게 저가)")
+    # 호가단위(KRX 가격대별). 현재가 -10% 를 호가단위로 내림 → 상/하한가(±30%) 이내 & 저가라 미체결.
+    def _tick(p):
+        for cap, t in ((2000, 1), (5000, 5), (20000, 10), (50000, 50), (200000, 100), (500000, 500)):
+            if p < cap:
+                return t
+        return 1000
+    tick = _tick(price)
+    limit = max(tick, (int(price * 0.90) // tick) * tick)
+    print(f"    매수 지정가 {limit:,}원 x1주 (현재가 -10%, 호가단위 {tick}, 체결 안 되게 저가)")
     try:
         order = broker.place_order(TEST_CODE, Side.BUY, 1, OrderType.LIMIT, price=limit,
                                    name="삼성전자", reason="it_test")
