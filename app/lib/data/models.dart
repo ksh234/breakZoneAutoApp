@@ -27,13 +27,15 @@ class Candidate {
   final String code, name, status, signal;
   final int releaseAmount, currentPrice;
   final num dropRatio;
+  final DateTime? releaseDate;
   Candidate({required this.code, required this.name, required this.status,
     required this.signal, required this.releaseAmount, required this.currentPrice,
-    required this.dropRatio});
+    required this.dropRatio, this.releaseDate});
   factory Candidate.fromMap(Map<String, dynamic> m) => Candidate(
     code: _s(m['code']), name: _s(m['name']), status: _s(m['status']),
     signal: _s(m['signal']), releaseAmount: _i(m['release_amount']),
     currentPrice: _i(m['current_price']), dropRatio: _n(m['drop_ratio']),
+    releaseDate: DateTime.tryParse(_s(m['release_date'])),
   );
 }
 

@@ -5,6 +5,20 @@ import '../data/repos.dart';
 
 final _won = NumberFormat('#,###');
 final _hm = DateFormat('MM/dd HH:mm');
+final _ymd = DateFormat('yy.MM.dd');
+
+String _statusKr(String s) => switch (s) {
+  'ok' => '정상', 'partial' => '부분', 'pending' => '미확정', 'error' => '오류', _ => s,
+};
+
+String _dday(DateTime? d) {
+  if (d == null) return '';
+  final now = DateTime.now();
+  final days = DateTime(d.year, d.month, d.day)
+      .difference(DateTime(now.year, now.month, now.day)).inDays;
+  if (days == 0) return 'D-day';
+  return days > 0 ? 'D-$days' : 'D+${-days}';
+}
 
 Widget _async<T>(AsyncValue<List<T>> v, Widget Function(List<T>) build, String empty) {
   return v.when(
@@ -23,19 +37,34 @@ class CandidatesView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final v = ref.watch(candidatesProvider);
     return _async(v, (list) {
-      final sorted = [...list]..sort((a, b) => a.dropRatio.compareTo(b.dropRatio));
+      // 해제일 가까운 순(오름차순), 날짜 없는 건 뒤로
+      final sorted = [...list]..sort((a, b) {
+        if (a.releaseDate == null && b.releaseDate == null) return 0;
+        if (a.releaseDate == null) return 1;
+        if (b.releaseDate == null) return -1;
+        return a.releaseDate!.compareTo(b.releaseDate!);
+      });
       return ListView.separated(
         itemCount: sorted.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (_, i) {
           final c = sorted[i];
+          final dateStr = c.releaseDate == null
+              ? '해제일 미정'
+              : '해제 ${_ymd.format(c.releaseDate!)} (${_dday(c.releaseDate)})';
           return ListTile(
             dense: true,
             title: Text('${c.name} (${c.code})'),
-            subtitle: Text('해제 ${_won.format(c.releaseAmount)} · 현재 ${_won.format(c.currentPrice)} · ${c.status}'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text('해제가 ${_won.format(c.releaseAmount)} · 현재 ${_won.format(c.currentPrice)} · ${_statusKr(c.status)}'),
+              ],
+            ),
             trailing: Text('${c.dropRatio > 0 ? '+' : ''}${c.dropRatio}%',
                 style: TextStyle(fontWeight: FontWeight.bold,
-                    color: c.dropRatio <= 25 ? Colors.orange : Colors.grey)),
+                    color: c.dropRatio >= 30 ? Colors.orange : Colors.grey)),
           );
         },
       );
