@@ -12,42 +12,40 @@
 | 항목 | 값 |
 |---|---|
 | **마지막 업데이트** | 2026-09-03 |
-| **현재 Phase** | **Phase 0~5 완료 + 라이브 실증(왕복주문·제어).** 전략 정교화 진행 중 |
-| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **137개**. Flutter 앱 7화면 실행·로그인·제어 실증. 사용법 문서([사용법.md](사용법.md)). |
-| **다음 마일스톤** | 단계 A ✅ + 키움 왕복주문 ✅(Phase 2 완료). **다음: 단계 B 본편** — 봇 켜고 자동매매 ON 관찰(장중). 이후 Phase 6. |
-| **블로커** | 없음. (라이브 검증은 장중 필요) |
+| **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
+| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **137개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**. 사용법 문서([사용법.md](사용법.md)). |
+| **다음 마일스톤** | **단계 B 본편** — 폰/PC 앱에서 자동매매 ON → 첫 모의매매 관찰(장중). 그다음 Phase 6(백테스트·모의검증). |
+| **블로커** | 없음. (첫 매매 관찰은 장중 필요) |
 
 ---
 
 ## ▶️ 다음에 할 일 (바로 착수 지점)
 
-**🙋 장중 라이브 운용 검증 (Phase 4 완료 게이트) — 평일 09:00~15:30**
-```powershell
-cd engine
-.\.venv\Scripts\python.exe -m src.main
-```
-→ 봇이 키움+Supabase 연결, status=stopped 로 대기. 매매를 켜려면 Supabase `commands` 에
-`{owner:<UID>, type:'start', status:'pending'}` INSERT (또는 Phase5 앱). 자동진입은 `settings.enabled=true` 필요.
-관찰: Supabase `bot_state`(하트비트)·`candidates`·`orders`·`events` 갱신. Ctrl+C 로 종료.
-> ⚠️ 모의계좌라 안전하지만, 처음엔 `settings.enabled=false`(관망)로 하트비트·후보만 확인 후 켜기 권장.
+**🙋 단계 B 본편 — 첫 모의매매 관찰 (평일 장중 09:00~15:30)**
+1. 봇 실행: `cd engine; .\.venv\Scripts\python.exe -m src.main` (터미널 계속 켜둠)
+2. 앱(폰/PC): 제어 → **시작** → 설정 → **자동매매 활성화 ON** → 저장
+3. 관찰: 후보 탭에 **상태 "정상" + 하락 30%↑** 종목이 매수 후보. 조건 맞으면 주문/포지션에 뜸.
+4. 이상 시 제어 → **긴급정지(kill)**.
+> 조건이 까다로워 당장 매매 없을 수 있음(정상). 핵심은 봇이 안 죽고 조건 맞으면 주문 나가는지.
 
-**🙋 (미완) 키움 왕복주문 `it_kiwoom.py --order` — 장중 1회 (Phase 2 마무리)**
+**그다음 — Phase 6 (백테스트 + 모의 2~4주 검증):** 파라미터 데이터로 튜닝 → 실계좌(Phase 7) 전 신뢰 확보.
 
-**그다음 — Phase 5 (Flutter 앱, 🤖):** 대시보드·제어(start/stop/kill)·설정(파라미터 조절)·이벤트. Flutter 이미 설치됨(D:\dev\flutter).
-
-**미결/후속:**
+**미결/후속(급하지 않음):**
 - 키움 정정 TR(kt10002) 미검증(취소+재주문 대체 가능).
-- 포지션 전략상태(분할매수/매도) 영속화 — 재시작 시 브로커 잔고 기반 근사 복원만. 정밀화 필요.
-- 오프라인 버퍼(네트워크 끊김 시 상태 재전송) 후속.
-- 명령 리스너 라이브 실증(`--listen` 또는 앱).
+- 포지션 전략상태(분할매수/매도)·저점 추적 영속화 — 재시작 시 리셋(브로커 잔고 기반 근사 복원).
+- 오프라인 버퍼(네트워크 끊김 재전송) 후속.
+- 봇 24시간화 = Phase 8 클라우드 이관.
 
-**재현:**
+**재현/실행:**
 ```powershell
-cd engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 130개
-.\.venv\Scripts\python.exe -m src.analysis.candidates       # 경고주 후보
-.\.venv\Scripts\python.exe tools\check_supabase.py          # 중계
-.\.venv\Scripts\python.exe -m src.main                      # 봇 (장중 라이브)
+# 봇
+cd D:\myWorkspace\breakZoneAutoApp\engine
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 137개
+.\.venv\Scripts\python.exe -m src.main                      # 봇 실행(장중)
+# 앱
+cd D:\myWorkspace\breakZoneAutoApp\app
+& "D:\dev\flutter\bin\flutter.bat" run -d chrome            # PC 웹
+& "D:\dev\flutter\bin\flutter.bat" build apk --release --split-per-abi   # 폰 APK(arm64=요즘폰)
 ```
 
 ---
@@ -66,8 +64,11 @@ cd engine
 - [x] engine Phase 0 스캐폴딩 + 키움 연결 스모크 테스트 작성
 - [x] 키움 모의 접근토큰 발급 성공(Phase 0 게이트)
 - [x] **Phase 1: breakZone 분석 로직 이식 + `build_candidates()` 라이브 후보 산출(22종목) + 테스트 68개 통과**
-- [x] **Phase 2: 키움 스펙 실측 + `broker/`(BrokerAdapter+KiwoomRestBroker) 구현 + 읽기전용 라이브 검증 + 테스트 85개** (왕복주문 실증은 사용자 대기)
-- [x] **Phase 3: Supabase 마이그레이션(7테이블+RLS+Realtime) + `relay/`(Relay 중계) + config + 테스트 91개 + 라이브 검증 완료** ✅
+- [x] **Phase 2: 키움 Broker Adapter + 왕복주문 실증(매수→미체결→취소)** ✅
+- [x] **Phase 3: Supabase 마이그레이션(7테이블+RLS+Realtime) + Relay 중계 + 라이브 검증** ✅
+- [x] **Phase 4: 전략 엔진(규칙·리스크·엔진·main) + 사용자 전략 확정·정교화 + 단계 A 제어 실증** ✅
+- [x] **Phase 5: Flutter 앱 7화면 + 안드로이드 APK 폰 설치·로그인 정상** ✅
+- [x] 테스트 **137개** 통과. 사용법 문서([사용법.md](사용법.md)).
 
 ---
 
@@ -87,6 +88,10 @@ cd engine
   7. **저가 반등 매수** `entry_rebound_pct` — 매수구간 저점 대비 반등 시 매수(falling-knife 회피, 0=즉시).
 - **enabled 의미 명확화:** 매수만 on/off, 청산은 running이면 항상.
 - **문서:** [사용법.md](사용법.md) 신규(실행·화면·매수/매도 조건·설정 전체·FAQ). 테스트 **137개**.
+- **📱 안드로이드 폰 앱 배포 완료:** Android Studio(SDK) 설치 → APK 빌드. 빌드 이슈 2건 해결:
+  ① D:프로젝트/C:펍캐시 드라이브 상이 → Kotlin 증분 상대경로 오류 → `android/gradle.properties`에 `kotlin.incremental=false`.
+  ② 릴리스 APK 인터넷 권한 누락(로그인 host lookup 실패) → `AndroidManifest.xml`에 `android.permission.INTERNET`.
+  → arm64 APK(17.9MB, `--split-per-abi`로 30MB↓) 폰 설치 → **로그인·실시간 정상 작동 확인.** 빌드 명령: `flutter build apk --release --split-per-abi`.
 
 ### 세션 2026-09-02 (전략 세부조정 + 문서 정합성 정리)
 - **🟢 단계 A 라이브 검증 통과:** 봇 구동 → 앱 하트비트 살아남, 시작/정지 양방향 제어 작동, 후보 탭 실시간 표시. 봇↔Supabase↔앱 전체 통신·제어 실증. (주문 제외 전 시스템 OK) → 다음: 단계 B 장중 매매(내일).
