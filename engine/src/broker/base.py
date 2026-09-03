@@ -24,6 +24,10 @@ class BrokerAdapter(ABC):
     def get_prices(self, codes: list[str]) -> dict[str, int]:
         """여러 종목 현재가 일괄(조회 성공분만)."""
 
+    def cached_price(self, code: str) -> Optional[int]:
+        """실시간(WS) 캐시의 현재가. 없으면 None. REST 호출 안 함(기본 None)."""
+        return None
+
     @abstractmethod
     def place_order(
         self, code: str, side: Side, qty: int,

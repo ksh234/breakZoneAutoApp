@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from ..analysis import pykrx_fetcher
+from ..analysis.calculator import compute_drop_ratio
 from ..analysis.candidates import Candidate, build_candidates
 from ..broker.base import BrokerAdapter
 from ..broker.errors import BrokerError
@@ -79,6 +80,16 @@ class StrategyEngine:
         except Exception:
             logger.exception("후보 수집 실패")
             return
+        # 현재가·하락비율을 키움 현재가로 채움(앱 후보탭 표시용)
+        try:
+            prices = self.broker.get_prices([c.code for c in cands if c.code])
+            for c in cands:
+                p = prices.get(c.code)
+                if p:
+                    c.current_price = p
+                    c.drop_ratio = compute_drop_ratio(c.release_amount, p)
+        except Exception:
+            logger.exception("후보 현재가 조회 실패")
         self.candidates = {c.code: c for c in cands if c.code}
         try:
             self.relay.upsert_candidates(cands)
@@ -123,6 +134,7 @@ class StrategyEngine:
             self._heartbeat(market)
             return
         self.sync_positions()
+        self._sync_candidate_display()
         pending = self._pending_codes()
         self._evaluate_exits(pending)
         self._evaluate_entries(pending)
@@ -149,6 +161,21 @@ class StrategyEngine:
             self.relay.upsert_positions(positions)
         except Exception:
             logger.exception("positions upsert 실패")
+
+    def _sync_candidate_display(self) -> None:
+        """후보 현재가/하락비율을 실시간(WS) 캐시로 갱신해 Supabase 반영(변경분만, REST 없음)."""
+        changed = []
+        for code, cand in self.candidates.items():
+            p = self.broker.cached_price(code)
+            if p and p != cand.current_price:
+                cand.current_price = p
+                cand.drop_ratio = compute_drop_ratio(cand.release_amount, p)
+                changed.append(cand)
+        if changed:
+            try:
+                self.relay.upsert_candidates(changed)
+            except Exception:
+                logger.exception("후보 현재가 갱신 실패")
 
     def _pending_codes(self) -> set[str]:
         try:

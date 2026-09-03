@@ -20,6 +20,7 @@ def _broker(price=9000, positions=None, cash=1_000_000):
     b.get_positions.return_value = positions or []
     b.get_unfilled_orders.return_value = []
     b.get_balance.return_value = Balance(cash=cash, equity=cash, stock_value=0)
+    b.cached_price.return_value = None   # 후보 표시 갱신은 테스트에서 무시
     b.place_order.return_value = Order(
         code="005930", name="삼성전자", side=Side.BUY, qty=1,
         order_type=OrderType.LIMIT, price=price, status=OrderStatus.SUBMITTED,

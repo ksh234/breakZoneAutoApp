@@ -222,6 +222,10 @@ class KiwoomRestBroker(BrokerAdapter):
                 out[clean_code(c)] = p
         return out
 
+    def cached_price(self, code: str) -> Optional[int]:
+        with self._lock:
+            return self._prices.get(clean_code(code))
+
     # ── 주문 ──────────────────────────────────────────
     def place_order(
         self, code: str, side: Side, qty: int,
