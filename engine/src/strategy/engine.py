@@ -25,6 +25,7 @@ from .state import PositionState
 
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
+PARAMS_RELOAD_SEC = 30  # settings 주기 재로드(앱 set_param 명령 유실·대시보드 직접 수정 대비 안전망)
 
 
 class StrategyEngine:
@@ -44,13 +45,32 @@ class StrategyEngine:
         self._subscribed: set[str] = set()
         self._entry_blocked = False
         self.candidate_lows: dict[str, int] = {}   # 매수구간 종목별 저점(저가 반등 매수용)
+        self._params_loaded_at: datetime | None = None  # 마지막 settings 로드 시각(None=아직 미로드 → 주기 재로드 비활성)
 
     # ── 수명주기 / 명령 ───────────────────────────────
-    def load_params(self) -> None:
+    def load_params(self, *, source: str = "startup") -> bool:
+        """settings 로드. 값이 바뀌었으면 True + 이벤트(startup 제외). 실패 시 기존 유지."""
         try:
-            self.params = StrategyParams.from_settings(self.relay.load_settings())
+            new = StrategyParams.from_settings(self.relay.load_settings())
         except Exception:
             logger.exception("settings 로드 실패 — 기존 파라미터 유지")
+            return False
+        self._params_loaded_at = self._now()
+        if new == self.params:
+            return False
+        old, self.params = self.params, new
+        diff = ", ".join(f"{k}={v}" for k, v in vars(new).items() if getattr(old, k) != v)
+        logger.info("설정 반영(%s): %s", source, diff)
+        if source != "startup":
+            self._emit("state", "info", "설정 반영", diff)
+        return True
+
+    def _maybe_reload_params(self, now: datetime) -> None:
+        """PARAMS_RELOAD_SEC 마다 settings 재로드. 시작 시 load_params 이후에만 동작(테스트/미로드 상태 보호)."""
+        if self._params_loaded_at is None:
+            return
+        if (now - self._params_loaded_at).total_seconds() >= PARAMS_RELOAD_SEC:
+            self.load_params(source="periodic")
 
     def handle_command(self, row: dict):
         t = row.get("type")
@@ -66,7 +86,7 @@ class StrategyEngine:
         elif t == "kill":
             self.kill()
         elif t == "set_param":
-            self.load_params(); return "설정 반영"
+            return "설정 반영" if self.load_params(source="command") else "설정 변경 없음"
         elif t == "close_position":
             return self.close_position(payload.get("code", ""))
         else:
@@ -131,6 +151,7 @@ class StrategyEngine:
     # ── 매매 루프 (tick) ──────────────────────────────
     def tick(self) -> None:
         now = self._now()
+        self._maybe_reload_params(now)   # 정지/장외 상태에서도 설정(enabled 등) 변경을 따라감
         self._maybe_daily_reset(now)
         market = is_market_open(now)
         if self.status != "running" or not market:

@@ -5,6 +5,7 @@ r"""봇 엔트리 — 스케줄러 루프 + 상태기계 + 명령 구독. docs/0
 
 - 시작 시 status=stopped(안전). 앱/commands 의 'start' 명령으로 매매 시작.
 - tick 주기(params.tick_seconds)로 매매 평가, REFRESH_SEC 마다 후보/지표 갱신(장중).
+- settings 는 시작 시 + 'set_param' 명령 시 + PARAMS_RELOAD_SEC(30초) 주기로 재로드(앱 저장 반영).
 - Ctrl+C 로 안전 종료(WS·명령리스너 정리).
 """
 from __future__ import annotations

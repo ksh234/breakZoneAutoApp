@@ -79,9 +79,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     try {
       await saveSettings(enabled: _enabled, extra: extra);
+      // 봇에 즉시 반영 요청(명령). 명령이 유실돼도 봇이 30초 주기로 settings 재로드함.
+      await sendCommand('set_param');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('설정 저장됨 (봇에 반영)')));
+            const SnackBar(content: Text('설정 저장됨 — 봇에 반영 요청(이벤트 탭에서 "설정 반영" 확인)')));
       }
     } catch (e) {
       if (mounted) {

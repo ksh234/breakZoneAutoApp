@@ -119,3 +119,57 @@ def test_handle_command_kill_sells_all():
     args = broker.place_order.call_args.args
     assert args[1] == Side.SELL and args[3] == OrderType.MARKET  # 시장가 전량
     assert e.status == "stopped"
+
+
+# ── settings 재로드(앱 설정 저장 반영) ──
+def _engine_with_clock(settings_row):
+    """실제 load_params 경로 사용. clock['now'] 로 시각 조절."""
+    clock = {"now": datetime(2026, 9, 2, 10, 0, tzinfo=KST)}
+    relay = MagicMock()
+    relay.load_settings.return_value = settings_row
+    e = StrategyEngine(_broker(), relay, now=lambda: clock["now"])
+    e.load_params()                      # startup 로드 → 주기 재로드 활성
+    return e, relay, clock
+
+
+def test_startup_load_params_no_event():
+    e, relay, _ = _engine_with_clock({"enabled": False, "extra": {"entry_drop_pct": 33}})
+    assert e.params.enabled is False and e.params.entry_drop_pct == 33
+    assert not relay.insert_event.called   # 시작 로드는 이벤트 없음
+
+
+@patch("src.strategy.engine.is_market_open", return_value=False)
+def test_periodic_reload_applies_app_settings_even_when_stopped(_m):
+    e, relay, clock = _engine_with_clock({"enabled": False, "extra": {}})
+    relay.load_settings.return_value = {"enabled": True, "extra": {"entry_drop_pct": 40}}
+    clock["now"] += timedelta(seconds=10)
+    e.tick()                             # 30초 전 → 아직 반영 안 됨
+    assert e.params.enabled is False
+    clock["now"] += timedelta(seconds=25)
+    e.tick()                             # 35초 경과, status=stopped 여도 반영
+    assert e.params.enabled is True and e.params.entry_drop_pct == 40
+    kw = relay.insert_event.call_args.kwargs
+    assert kw["title"] == "설정 반영" and "enabled=True" in kw["message"]
+
+
+@patch("src.strategy.engine.is_market_open", return_value=False)
+def test_periodic_reload_unchanged_no_event(_m):
+    e, relay, clock = _engine_with_clock({"enabled": False, "extra": {}})
+    clock["now"] += timedelta(seconds=60)
+    e.tick()
+    assert not relay.insert_event.called
+
+
+def test_set_param_command_reloads_immediately():
+    e, relay, _ = _engine_with_clock({"enabled": False, "extra": {}})
+    relay.load_settings.return_value = {"enabled": True, "extra": {}}
+    assert e.handle_command({"type": "set_param", "payload": {}}) == "설정 반영"
+    assert e.params.enabled is True
+    assert e.handle_command({"type": "set_param", "payload": {}}) == "설정 변경 없음"
+
+
+def test_load_params_failure_keeps_previous():
+    e, relay, _ = _engine_with_clock({"enabled": True, "extra": {}})
+    relay.load_settings.side_effect = RuntimeError("down")
+    assert e.load_params(source="periodic") is False
+    assert e.params.enabled is True

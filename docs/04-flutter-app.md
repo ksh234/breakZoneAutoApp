@@ -82,7 +82,7 @@ UI는 `ref.watch(...)` 로 자동 갱신. 연결 상태/에러도 표시.
 - (반자동 확장) 승인 대기 주문 리스트: approve/reject.
 
 ### 4.6 설정 화면
-- `settings` 파라미터 편집 폼(진입구간·1회금액·최대보유·익절/손절·일손실상한·mode). 저장 → `settings` update(또는 `set_param` 명령).
+- `settings` 파라미터 편집 폼(15개, 그룹별). 저장 → `settings` update **그리고** `set_param` 명령 insert(즉시 반영). 봇은 별도로 30초 주기 재로드(`PARAMS_RELOAD_SEC`) — 명령 유실·대시보드 직접 수정도 따라감. (2026-09-03: 이전엔 update만 해서 실행 중 봇에 미반영되던 버그 수정)
 - **mode=real 토글은 강한 경고 + 재확인**(실제 자금). docs/05 체크리스트 링크.
 
 ### 4.7 이벤트/알림 이력
