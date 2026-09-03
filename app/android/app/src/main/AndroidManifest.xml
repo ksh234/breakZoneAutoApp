@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 인터넷 권한 (Supabase 접속). 릴리스 APK 필수 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="breakzone_app"
         android:name="${applicationName}"
