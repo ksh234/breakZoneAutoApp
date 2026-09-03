@@ -14,19 +14,23 @@
 | **마지막 업데이트** | 2026-09-03 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
 | **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **158개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
-| **다음 마일스톤** | **클라우드 이관(Phase 8 앞당김, D-015)** — 락·영속화 → GitHub → VM 배포. 그 위에서 단계 B 첫 모의매매 관찰 + Phase 6 장기 검증. |
-| **블로커** | 없음. (첫 매매 관찰은 장중 필요) |
+| **다음 마일스톤** | ① 집 PC 에서 **단계 B 첫 모의매매 관찰**(장중, 새 코드) ② **클라우드 VM 생성(사용자 보류 중)** → 서버 설치·전환 → Phase 6 장기 검증 |
+| **블로커** | VM 생성 보류(사용자 "나중에"). Oracle 무료티어는 가입 시 한국 리전 미제공 상태였음(2026-09-03). 대안: 며칠 뒤 Oracle 재시도 / AWS Lightsail 서울(월 $5) / Azure 무료 12개월. |
 
 ---
 
 ## ▶️ 다음에 할 일 (바로 착수 지점)
 
-**🙋 단계 B 본편 — 첫 모의매매 관찰 (평일 장중 09:00~15:30)**
-1. 봇 실행: `cd engine; .\.venv\Scripts\python.exe -m src.main` (터미널 계속 켜둠)
-2. 앱(폰/PC): 제어 → **시작** → 설정 → **자동매매 활성화 ON** → 저장
-3. 관찰: 후보 탭에 **상태 "정상" + 하락 30%↑** 종목이 매수 후보. 조건 맞으면 주문/포지션에 뜸.
+**🙋 단계 B 본편 — 첫 모의매매 관찰 (평일 장중 09:00~15:30, 집 PC = LIVE 봇)**
+0. **폰에 새 APK 재설치**(설정 저장 → set_param 명령 전송 수정본. `app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`, 2026-09-03 16:11 빌드)
+1. 봇 실행: `cd engine; .\.venv\Scripts\python.exe -m src.main` (터미널 계속 켜둠). 로그에 **"락 획득(<PC호스트명>)"** 확인. PC `.env` 는 `BOT_DRY_RUN` 없음/0 유지(PC 가 아직 운용 봇).
+2. 앱(폰/PC): 제어 → **시작** → 설정 → **자동매매 활성화 ON** → 저장 → 이벤트 탭에 **"설정 반영 enabled=True"** 뜨는지 확인(이게 안 뜨면 설정 미반영 버그 재발).
+3. 관찰: 후보 탭에 **상태 "정상" + 하락 30%↑** 종목이 매수 후보. 조건 맞으면 주문/포지션에 뜸. 매수 시 `strategy_state` 에 행 생성됨(Supabase 대시보드로 확인 가능).
 4. 이상 시 제어 → **긴급정지(kill)**.
 > 조건이 까다로워 당장 매매 없을 수 있음(정상). 핵심은 봇이 안 죽고 조건 맞으면 주문 나가는지.
+> ⚠️ 저가 반등 2% + 기준 30% 조합은 실효 기준 ≈31.4%(§열려있는 질문). 관찰 중 매수가 안 나오면 이 영향일 수 있음.
+
+**☁️ 클라우드 이관 재개 시(사용자 VM 준비 후):** docs/06 부록 A 로 VM 생성 → IP·사용자명·키파일명 전달 → Claude: `ssh` 접속 확인 → `sudo bash infra/server/setup.sh https://github.com/ksh234/breakZoneAutoApp.git` → `.env` 배치(`BOT_HOLDER_ID=cloud-seoul`) → 스모크(`tools/check_kiwoom_token.py`, `tools/check_supabase.py`, KIND 크롤링) → PC 봇 종료 → `systemctl start breakzone-bot` → 앱 "봇 LIVE" 확인 → PC `.env` `BOT_DRY_RUN=1`.
 
 **그다음 — Phase 6 (백테스트 + 모의 2~4주 검증):** 파라미터 데이터로 튜닝 → 실계좌(Phase 7) 전 신뢰 확보.
 
@@ -84,7 +88,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **결정(사용자):** D-014 단일 사용자 유지 / D-015 **클라우드 이관을 장기 테스트 앞으로**(Docker 생략, 국내 VM, git 재배포). 선행: bot_lock 락 + 상태 영속화 + GitHub 원격.
 - **클라우드 이관 1단계 완료(봇 준비):** ① `bot_lock` 락(마이그레이션 0005, DB 함수 acquire/release, `main.LockKeeper`: 획득→LIVE / 실패→관찰 대기·15초 재시도·stale 90초 승계 / 갱신 실패→관찰+critical) ② `strategy_state` 영속화(분할횟수·투자액·분할매도·고점·저점, 변경 시 저장, 시작 시 복원) ③ `BOT_DRY_RUN` 드라이런(`DryRunRelay` 쓰기 전부 무시, 주문은 `[DRY]` 로그, 명령 리스너 off). **CLI `db push` 로 0005 원격 적용** + 원격 락 스모크(획득·갱신·승계·해제) 실측 OK. 테스트 +16 → **158개**. docs/02·03·05·06·사용법 갱신.
 - **2단계 GitHub 원격 완료:** 사용자가 private 저장소 생성 + 첫 push(브라우저 인증) → 이후 Claude 셸에서 비대화 push 가능. 원격에 시크릿 파일 없음 확인. `infra/server/`(setup.sh·systemd 유닛·deploy.sh) + `.gitattributes`(sh/service/sql LF) 추가.
-- 다음: 폰 APK 재설치 → **3단계 VM(사용자: 서울 리전 Ubuntu, IP·사용자명·키파일명 전달) → 4단계 서버 설치(Claude)** → 단계 B/Phase 6 장기 테스트는 클라우드에서.
+- **3단계 VM 보류:** Oracle 무료티어 가입 화면에 한국 리전(서울/춘천) 미제공 → 해외 리전은 KRX/KIND 차단 위험이라 비권장. 대안(Lightsail 서울 월 $5 / Oracle 재시도 / Azure) 제시 → 사용자 "나중에 다시". docs/06 부록 A 에 VM 생성 가이드 저장.
+- 세션 종료 상태: 커밋 44개, origin/main 동기화. 테스트 158개. 다음 세션 = 집 PC 단계 B(장중) 또는 VM 재개.
 
 ### 세션 2026-09-03 (라이브 검증 + 전략 정교화 + 사용법 문서)
 - **Phase 2 완료:** 키움 왕복주문 실증(매수→미체결→취소, ord_no 0074195).
