@@ -140,7 +140,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: SwitchListTile(
                 title: const Text('자동매매 활성화',
                     style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(_enabled ? '조건 충족 시 자동 매수/매도' : '분석·모니터링만 (매매 안 함)'),
+                subtitle: Text(_enabled
+                    ? '조건 충족 시 자동 매수 + 보유 청산'
+                    : '신규 매수 중단 (보유 종목 청산 규칙은 계속 작동)'),
                 value: _enabled,
                 onChanged: (v) => setState(() => _enabled = v),
               ),

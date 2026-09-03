@@ -129,6 +129,7 @@ def tick():                              # 동기(D-011)
     # 3) 동기화
     relay.push_bot_state(status, market_open, equity, cash, day_pnl, positions_cnt)   # 하트비트
 ```
+- **enabled / 보유 관리:** `enabled` 는 **신규·추가 매수만** on/off. **청산(exits)은 running 이면 항상 평가** → 경고 해제로 후보에서 빠진 보유 종목도 계속 청산 관리(positions 기준, envelope·시세도 보유 종목에 대해 유지). 완전 정지=stop(status), 전량청산=kill. 후보는 refresh 때 현재 경고주 목록에 없으면 삭제(prune)되지만 **positions 는 유지**된다.
 - **후보/지표 갱신:** `refresh()` 가 별도 주기(`REFRESH_SEC`=10분, 장중)로 KIND 수집 + 종목별 envelope/전일종가(pykrx) 계산 + 키움 WS 재구독.
 - **명령 처리:** `relay.start_command_listener` 폴링 스레드가 `commands`(start/stop/pause/resume/kill/set_param/close_position)를 1.5초 주기로 수신→`engine.handle_command`.
 - **현재가:** 키움 실시간(WS 캐시)+REST 폴백. 과거종가(envelope·해제금액)는 pykrx.
