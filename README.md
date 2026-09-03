@@ -15,7 +15,9 @@ KRX 투자경고종목(경고주)을 분석해 **자동매매**하는 시스템.
 - 봇은 outbound 연결만 → NAT/유동IP 무관, 클라우드 이관 용이.
 
 ## 시작하기
-**먼저 [`ROADMAP.md`](ROADMAP.md) 를 읽으세요.** 전체 로드맵 + 상세 설계가 들어 있고, 새 세션은 이 문서만으로 Phase 0부터 시작할 수 있습니다.
+- **사용법·매수/매도 조건: [`사용법.md`](사용법.md)** ← 실행 방법·앱 화면·전략 조건·설정 전부
+- 진행 상황: [`PROGRESS.md`](PROGRESS.md) · 결정 근거: [`DECISIONS.md`](DECISIONS.md)
+- 전체 로드맵 + 상세 설계: [`ROADMAP.md`](ROADMAP.md) (새 세션은 이 문서로 Phase 0부터 시작 가능)
 
 설계 문서: [`docs/`](docs/)
 - [00 아키텍처](docs/00-architecture.md) · [01 키움 브로커](docs/01-broker-kiwoom.md) · [02 Supabase 스키마](docs/02-supabase-schema.md) · [03 전략 명세](docs/03-strategy-spec.md) · [04 Flutter 앱](docs/04-flutter-app.md) · [05 보안·리스크](docs/05-security-risk.md) · [06 배포](docs/06-deployment.md)
