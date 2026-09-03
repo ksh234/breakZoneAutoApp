@@ -30,6 +30,8 @@
 
 **그다음 — Phase 6 (백테스트 + 모의 2~4주 검증):** 파라미터 데이터로 튜닝 → 실계좌(Phase 7) 전 신뢰 확보.
 
+**🙋 Supabase CLI 연결(사용자 1회, 새 터미널):** ① 대시보드 Account→Access Tokens 발급 → `supabase login` ② `supabase link --project-ref <ref>`(DB 비밀번호 입력) → 완료되면 Claude가 `migration repair`(0001~0004 applied 표시) + `migration list` 확인.
+
 **미결/후속(급하지 않음):**
 - 키움 정정 TR(kt10002) 미검증(취소+재주문 대체 가능).
 - 포지션 전략상태(분할매수/매도)·저점 추적 영속화 — 재시작 시 리셋(브로커 잔고 기반 근사 복원).
@@ -216,7 +218,7 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 | Git | ✅ | 2.55.0 | 0+ |
 | Flutter | ✅ (PATH 미등록 → 전체경로 호출) | `D:\dev\flutter` 3.47.2 | 5 |
 | Android Studio/SDK | ✅ (2026-09-03 설치) | APK 빌드용 | 5 |
-| Node + Supabase CLI | ❌ | 마이그레이션은 SQL Editor로 적용 중 → 현재 불필요 | (3) |
+| Supabase CLI | ✅ 설치(2026-09-03) — **login/link 대기** | `D:\dev\supabase` v2.116.0 (PATH 등록, 새 터미널부터). 연결 후 `db push`로 Claude가 마이그레이션 직접 적용 | 3+ |
 | Docker | ❌ | — | 8 |
 
 **키/환경파일:** `engine/.env`(키움 모의 + Supabase secret), `app/lib/core/env.dart`(publishable key) 모두 존재(gitignore).
