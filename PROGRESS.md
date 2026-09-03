@@ -30,7 +30,7 @@
 
 **그다음 — Phase 6 (백테스트 + 모의 2~4주 검증):** 파라미터 데이터로 튜닝 → 실계좌(Phase 7) 전 신뢰 확보.
 
-**🚀 클라우드 이관 진행표 (D-015):** 1단계 봇 준비 ✅ → 2단계 GitHub 원격(사용자 생성→Claude push) ⬜ → 3단계 VM 생성·SSH(사용자) ⬜ → 4단계 서버 설치·systemd(Claude) ⬜ → 5단계 전환 검증(PC `.env` `BOT_DRY_RUN=1`, 클라우드 LIVE) ⬜
+**🚀 클라우드 이관 진행표 (D-015):** 1단계 봇 준비 ✅ → 2단계 GitHub 원격 ✅(`github.com/ksh234/breakZoneAutoApp` private, origin/main 추적, 비대화 push OK) → 3단계 VM 생성·SSH(사용자) ⬜ → 4단계 서버 설치·systemd(Claude, `infra/server/setup.sh`) ⬜ → 5단계 전환 검증(PC `.env` `BOT_DRY_RUN=1`, 클라우드 LIVE) ⬜
 
 **미결/후속(급하지 않음):**
 - 키움 정정 TR(kt10002) 미검증(취소+재주문 대체 가능).
@@ -83,7 +83,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **🐛 설정 미반영 버그 발견·수정:** 앱 설정 저장이 settings update 만 하고 `set_param` 명령을 안 보냄 + 봇은 시작/`set_param` 때만 로드 → 실행 중 봇에 "자동매매 ON" 이 영영 미반영(단계 B 절차가 그대로 실패할 상황). 수정 ① 봇 `PARAMS_RELOAD_SEC=30` 주기 재로드(정지/장외에도, 변경 시만 "설정 반영" 이벤트) ② 앱 저장 직후 `set_param` 명령 전송. 테스트 +5 → **142개**. APK 재빌드(arm64 17.9MB) → **폰 재설치 필요**.
 - **결정(사용자):** D-014 단일 사용자 유지 / D-015 **클라우드 이관을 장기 테스트 앞으로**(Docker 생략, 국내 VM, git 재배포). 선행: bot_lock 락 + 상태 영속화 + GitHub 원격.
 - **클라우드 이관 1단계 완료(봇 준비):** ① `bot_lock` 락(마이그레이션 0005, DB 함수 acquire/release, `main.LockKeeper`: 획득→LIVE / 실패→관찰 대기·15초 재시도·stale 90초 승계 / 갱신 실패→관찰+critical) ② `strategy_state` 영속화(분할횟수·투자액·분할매도·고점·저점, 변경 시 저장, 시작 시 복원) ③ `BOT_DRY_RUN` 드라이런(`DryRunRelay` 쓰기 전부 무시, 주문은 `[DRY]` 로그, 명령 리스너 off). **CLI `db push` 로 0005 원격 적용** + 원격 락 스모크(획득·갱신·승계·해제) 실측 OK. 테스트 +16 → **158개**. docs/02·03·05·06·사용법 갱신.
-- 다음: 폰 APK 재설치 → **2단계 GitHub 원격(사용자 생성 중) → 3단계 VM(사용자) → 4단계 서버 설치(Claude)** → 단계 B/Phase 6 장기 테스트는 클라우드에서.
+- **2단계 GitHub 원격 완료:** 사용자가 private 저장소 생성 + 첫 push(브라우저 인증) → 이후 Claude 셸에서 비대화 push 가능. 원격에 시크릿 파일 없음 확인. `infra/server/`(setup.sh·systemd 유닛·deploy.sh) + `.gitattributes`(sh/service/sql LF) 추가.
+- 다음: 폰 APK 재설치 → **3단계 VM(사용자: 서울 리전 Ubuntu, IP·사용자명·키파일명 전달) → 4단계 서버 설치(Claude)** → 단계 B/Phase 6 장기 테스트는 클라우드에서.
 
 ### 세션 2026-09-03 (라이브 검증 + 전략 정교화 + 사용법 문서)
 - **Phase 2 완료:** 키움 왕복주문 실증(매수→미체결→취소, ord_no 0074195).
