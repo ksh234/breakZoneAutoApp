@@ -15,7 +15,7 @@ from ..analysis.candidates import Candidate, build_candidates, compute_status
 from ..broker.base import BrokerAdapter
 from ..broker.errors import BrokerError
 from ..broker.models import OrderType, Position, Side
-from ..relay import Relay
+from ..relay import DryRunRelay, Relay
 from .indicators import Envelope, compute_envelope
 from .market import is_market_open
 from .params import StrategyParams
@@ -46,6 +46,57 @@ class StrategyEngine:
         self._entry_blocked = False
         self.candidate_lows: dict[str, int] = {}   # 매수구간 종목별 저점(저가 반등 매수용)
         self._params_loaded_at: datetime | None = None  # 마지막 settings 로드 시각(None=아직 미로드 → 주기 재로드 비활성)
+        self._real_relay = relay
+        self.live = True                   # False=드라이런/관찰: 주문 금지 + Supabase 쓰기 무시(DryRunRelay)
+        self._dry_logged: set[str] = set() # 드라이런 판정 로그 중복 방지(일 단위 리셋)
+
+    # ── 라이브/드라이런 전환 ──────────────────────────
+    def set_live(self, live: bool, reason: str = "") -> None:
+        """live=False: 주문 안 냄 + relay 쓰기 전부 무시. 락 미획득/BOT_DRY_RUN 용."""
+        if live == self.live:
+            return
+        self.live = live
+        self.relay = self._real_relay if live else DryRunRelay(self._real_relay)
+        logger.warning("모드 전환 → %s (%s)", "LIVE" if live else "DRY-RUN/관찰", reason)
+
+    def restore_state(self) -> int:
+        """strategy_state 에서 분할매수/매도·저점 복원(재시작·재배포). 반환: 복원 행 수."""
+        try:
+            rows = self.relay.load_strategy_states()
+        except Exception:
+            logger.exception("strategy_state 로드 실패 — 빈 상태로 시작")
+            return 0
+        for r in rows:
+            code = r["code"]
+            if r.get("entries_done") or r.get("partial_sold"):
+                self.states[code] = PositionState(
+                    code, entries_done=int(r.get("entries_done") or 0),
+                    invested_krw=int(r.get("invested_krw") or 0),
+                    partial_sold=bool(r.get("partial_sold")),
+                    peak_since_partial=int(r.get("peak_since_partial") or 0))
+            if r.get("zone_low"):
+                self.candidate_lows[code] = int(r["zone_low"])
+        if rows:
+            logger.info("전략상태 복원 %d행 (포지션 %d, 저점 %d)", len(rows), len(self.states), len(self.candidate_lows))
+        return len(rows)
+
+    def _persist_state(self, code: str) -> None:
+        """종목 전략상태(+저점) 저장. 둘 다 없으면 행 삭제. 실패는 로그만(매매 흐름 방해 금지)."""
+        st = self.states.get(code)
+        low = self.candidate_lows.get(code)
+        try:
+            if st is None and low is None:
+                self.relay.delete_strategy_state(code)
+            else:
+                self.relay.save_strategy_state(
+                    code,
+                    entries_done=st.entries_done if st else 0,
+                    invested_krw=st.invested_krw if st else 0,
+                    partial_sold=st.partial_sold if st else False,
+                    peak_since_partial=st.peak_since_partial if st else 0,
+                    zone_low=low)
+        except Exception:
+            logger.exception("strategy_state 저장 실패 %s", code)
 
     # ── 수명주기 / 명령 ───────────────────────────────
     def load_params(self, *, source: str = "startup") -> bool:
@@ -182,6 +233,7 @@ class StrategyEngine:
                     self.relay.remove_position(code)
                 except Exception:
                     pass
+                self._persist_state(code)
         try:
             self.relay.upsert_positions(positions)
         except Exception:
@@ -213,11 +265,13 @@ class StrategyEngine:
             if not price:
                 continue
             dr = cand.drop_ratio
+            prev = self.candidate_lows.get(code)
             if dr is not None and dr >= self.params.entry_drop_pct:
-                prev = self.candidate_lows.get(code)
                 self.candidate_lows[code] = min(prev, price) if prev else price
             else:
                 self.candidate_lows.pop(code, None)
+            if self.candidate_lows.get(code) != prev:
+                self._persist_state(code)
 
     def _pending_codes(self) -> set[str]:
         try:
@@ -231,7 +285,10 @@ class StrategyEngine:
             if not price:
                 continue
             st = self.states.setdefault(code, PositionState(code))
+            peak_before = st.peak_since_partial
             st.update_peak(price)
+            if st.peak_since_partial != peak_before:
+                self._persist_state(code)
             d = should_exit(qty=pos.qty, avg_price=pos.avg_price, price=price,
                             env=self.envelopes.get(code), params=self.params, state=st,
                             at_limit_up=self._at_limit_up(code, price))
@@ -297,7 +354,18 @@ class StrategyEngine:
     def _order_type(self) -> OrderType:
         return OrderType.LIMIT if self.params.order_type == "limit" else OrderType.MARKET
 
+    def _dry_log(self, key: str, msg: str) -> bool:
+        """드라이런이면 판정을 로그(같은 key 는 하루 1회)하고 True. 라이브면 False."""
+        if self.live:
+            return False
+        if key not in self._dry_logged:
+            self._dry_logged.add(key)
+            logger.info("[DRY] %s", msg)
+        return True
+
     def _buy(self, cand: Candidate, d, price: int) -> None:
+        if self._dry_log(f"buy:{cand.code}:{d.kind}", f"매수 시뮬 {cand.name} {d.kind} {d.qty}주 @ {price:,}"):
+            return
         ot = self._order_type()
         try:
             order = self.broker.place_order(cand.code, Side.BUY, d.qty, ot,
@@ -307,10 +375,13 @@ class StrategyEngine:
             self._emit("error", "warn", "매수 실패", f"{cand.name}: {e}")
             return
         self.states.setdefault(cand.code, PositionState(cand.code)).on_buy(d.qty, price)
+        self._persist_state(cand.code)
         self._record_order(order)
         self._emit("entry", "info", "매수 접수", f"{cand.name} {d.kind} {d.qty}주 @ {price:,}")
 
     def _sell(self, pos: Position, d, price: int) -> None:
+        if self._dry_log(f"sell:{pos.code}:{d.reason}", f"매도 시뮬 {pos.name} {d.reason} {d.qty}주 @ {price:,}"):
+            return
         ot = self._order_type()
         try:
             order = self.broker.place_order(pos.code, Side.SELL, d.qty, ot,
@@ -322,6 +393,7 @@ class StrategyEngine:
         st = self.states.setdefault(pos.code, PositionState(pos.code))
         if d.mark_partial_sold:
             st.on_partial_sell(price)
+            self._persist_state(pos.code)
         realized = (price - pos.avg_price) * d.qty
         self.day_realized_pnl += realized
         self._record_order(order)
@@ -329,6 +401,10 @@ class StrategyEngine:
                    f"{pos.name} {d.reason} {d.qty}주 @ {price:,} (실현 {realized:,})")
 
     def kill(self) -> None:
+        if not self.live:
+            logger.warning("[DRY] kill 요청 — 드라이런이라 주문 없이 status=stopped")
+            self.status = "stopped"
+            return
         self._emit("kill", "critical", "긴급정지(kill)", "전량 시장가 청산 시작")
         try:
             positions = self.broker.get_positions()
@@ -348,6 +424,8 @@ class StrategyEngine:
         pos = self.positions.get(code)
         if not pos:
             return "보유 없음"
+        if not self.live:
+            return "드라이런 — 주문 안 함"
         try:
             order = self.broker.place_order(code, Side.SELL, pos.qty, OrderType.MARKET,
                                             name=pos.name, reason="manual")
@@ -375,6 +453,7 @@ class StrategyEngine:
         if self._day != d:
             self._day = d
             self.day_realized_pnl = 0
+            self._dry_logged.clear()
 
     def _record_order(self, order) -> None:
         try:

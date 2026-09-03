@@ -34,6 +34,13 @@ SUPABASE_URL = _norm_supabase_url(_get("SUPABASE_URL"))
 SUPABASE_SECRET_KEY = _get("SUPABASE_SECRET_KEY") or _get("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_OWNER_UUID = _get("SUPABASE_OWNER_UUID")
 
+# ── 봇 인스턴스 / 이중 실행 방지 / 드라이런 (docs/05 §4, docs/06) ──
+import socket
+BOT_HOLDER_ID = _get("BOT_HOLDER_ID") or socket.gethostname()      # 락 보유자 식별(호스트명 기본)
+BOT_LOCK_STALE_SEC = int(_get("BOT_LOCK_STALE_SEC", "90"))           # 이 시간 넘게 하트비트 없으면 승계 가능
+BOT_LOCK_RENEW_SEC = int(_get("BOT_LOCK_RENEW_SEC", "15"))           # 락 갱신/재시도 주기
+BOT_DRY_RUN = _get("BOT_DRY_RUN", "0").lower() in ("1", "true", "yes")  # 1=주문·Supabase쓰기 전부 금지(관찰)
+
 # ── 기타 ──
 LOG_LEVEL = _get("LOG_LEVEL", "INFO").upper()
 

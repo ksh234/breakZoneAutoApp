@@ -35,9 +35,18 @@
 
 ## 4. 이중 실행 방지 (집 PC ↔ 클라우드)
 
-같은 키움 계좌에 봇이 둘이면 **이중 주문** 위험. 방지:
-- **분산 락:** Supabase에 `bot_lock`(owner, holder_id, heartbeat_at). 봇은 시작 시 락 획득(최근 heartbeat 없을 때만) → 주기 갱신. 락 미보유 봇은 매매 금지(관찰 모드).
-- 또는 운영 규칙으로 "동시에 하나만 실행"을 물리적으로 보장(이관 시 구 봇 종료 확인).
+같은 키움 계좌에 봇이 둘이면 **이중 주문** 위험. 두 겹으로 방지(2026-09-03 구현, 마이그레이션 0005):
+
+**① 분산 락 `bot_lock`** (id=1 단일행, `holder_id`, `heartbeat_at`)
+- DB 함수 `acquire_bot_lock(owner, holder, stale_sec)` 하나로 **획득=갱신**: 내가 보유 중이면 heartbeat 갱신, 비었거나 heartbeat 가 `stale_sec`(기본 90초) 이상 오래됐으면 승계. `INSERT … ON CONFLICT DO UPDATE … WHERE` 로 원자적. `release_bot_lock` 으로 정상 종료 시 해제. 앱 사용자(anon/authenticated)는 실행 권한 없음(봇 secret key 만).
+- 봇(`main.LockKeeper`): 시작 시 획득 시도 → 성공하면 **LIVE**(싱글턴 보장·상태 복원·명령 리스너). 실패하면 **관찰 모드**로 대기하며 `BOT_LOCK_RENEW_SEC`(15초)마다 재시도 → 보유자가 죽어 stale 되면 자동 승계(이벤트 "봇 LIVE"). 보유 중 갱신 실패 시 즉시 관찰 모드 + critical 이벤트 "락 상실".
+- 우선순위 없음 = **먼저 잡은 쪽 유지**. PC 에서 주문 포함 테스트가 필요하면 클라우드 서비스를 잠깐 내려 락을 풀고 진행.
+
+**② 드라이런 `BOT_DRY_RUN=1`** (PC 기본 권장, 클라우드 이관 후)
+- 락과 무관하게 항상 관찰 모드. `StrategyEngine.set_live(False)` → 주문 함수는 `[DRY] 매수/매도 시뮬 …` 로그만(종목·사유당 하루 1회), `relay` 는 `DryRunRelay` 로 교체되어 **Supabase 쓰기 전부 무시**(하트비트·후보·포지션·주문·이벤트·전략상태·명령 ack). 읽기(settings·strategy_state)는 실제 값. 명령 리스너도 안 켬(클라우드 봇 명령을 가로채지 않음).
+- 용도: 새 코드를 장중 PC 에서 실시간 시세로 돌려 판정만 관찰. 클라우드 봇 상태를 덮어쓰지 않음.
+
+관찰 모드(①실패)와 드라이런(②)은 엔진 관점에서 동일(`live=False`).
 
 ## 5. 장애 시나리오 → 대응 (모두 `events` 인앱 알림, 푸시 채택 시 푸시도)
 

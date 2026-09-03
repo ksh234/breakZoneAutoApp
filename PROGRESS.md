@@ -13,7 +13,7 @@
 |---|---|
 | **마지막 업데이트** | 2026-09-03 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
-| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **142개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
+| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **158개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
 | **다음 마일스톤** | **클라우드 이관(Phase 8 앞당김, D-015)** — 락·영속화 → GitHub → VM 배포. 그 위에서 단계 B 첫 모의매매 관찰 + Phase 6 장기 검증. |
 | **블로커** | 없음. (첫 매매 관찰은 장중 필요) |
 
@@ -30,9 +30,10 @@
 
 **그다음 — Phase 6 (백테스트 + 모의 2~4주 검증):** 파라미터 데이터로 튜닝 → 실계좌(Phase 7) 전 신뢰 확보.
 
+**🚀 클라우드 이관 진행표 (D-015):** 1단계 봇 준비 ✅ → 2단계 GitHub 원격(사용자 생성→Claude push) ⬜ → 3단계 VM 생성·SSH(사용자) ⬜ → 4단계 서버 설치·systemd(Claude) ⬜ → 5단계 전환 검증(PC `.env` `BOT_DRY_RUN=1`, 클라우드 LIVE) ⬜
+
 **미결/후속(급하지 않음):**
 - 키움 정정 TR(kt10002) 미검증(취소+재주문 대체 가능).
-- 포지션 전략상태(분할매수/매도)·저점 추적 영속화 — 재시작 시 리셋(브로커 잔고 기반 근사 복원).
 - 오프라인 버퍼(네트워크 끊김 재전송) 후속.
 - 봇 24시간화 = Phase 8 클라우드 이관.
 
@@ -40,7 +41,7 @@
 ```powershell
 # 봇
 cd D:\myWorkspace\breakZoneAutoApp\engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 142개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 158개
 .\.venv\Scripts\python.exe -m src.main                      # 봇 실행(장중)
 # 앱
 cd D:\myWorkspace\breakZoneAutoApp\app
@@ -81,7 +82,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **Supabase CLI 도입:** v2.116.0 설치(`D:/dev/supabase`, PATH) + `supabase init`(config.toml 커밋). 사용자 `login`(브라우저 승인) + `link`(DB 비밀번호 불필요 — 토큰 기반 login role). Claude가 `migration repair --status applied 0001~0004` → `migration list` 로컬=원격 일치, `db push --dry-run` up to date. **이후 마이그레이션은 Claude가 `supabase db push`로 직접 적용.**
 - **🐛 설정 미반영 버그 발견·수정:** 앱 설정 저장이 settings update 만 하고 `set_param` 명령을 안 보냄 + 봇은 시작/`set_param` 때만 로드 → 실행 중 봇에 "자동매매 ON" 이 영영 미반영(단계 B 절차가 그대로 실패할 상황). 수정 ① 봇 `PARAMS_RELOAD_SEC=30` 주기 재로드(정지/장외에도, 변경 시만 "설정 반영" 이벤트) ② 앱 저장 직후 `set_param` 명령 전송. 테스트 +5 → **142개**. APK 재빌드(arm64 17.9MB) → **폰 재설치 필요**.
 - **결정(사용자):** D-014 단일 사용자 유지 / D-015 **클라우드 이관을 장기 테스트 앞으로**(Docker 생략, 국내 VM, git 재배포). 선행: bot_lock 락 + 상태 영속화 + GitHub 원격.
-- 다음: 폰 APK 재설치 → **클라우드 이관 작업(§다음에 할 일)** → 단계 B/Phase 6 장기 테스트는 클라우드에서.
+- **클라우드 이관 1단계 완료(봇 준비):** ① `bot_lock` 락(마이그레이션 0005, DB 함수 acquire/release, `main.LockKeeper`: 획득→LIVE / 실패→관찰 대기·15초 재시도·stale 90초 승계 / 갱신 실패→관찰+critical) ② `strategy_state` 영속화(분할횟수·투자액·분할매도·고점·저점, 변경 시 저장, 시작 시 복원) ③ `BOT_DRY_RUN` 드라이런(`DryRunRelay` 쓰기 전부 무시, 주문은 `[DRY]` 로그, 명령 리스너 off). **CLI `db push` 로 0005 원격 적용** + 원격 락 스모크(획득·갱신·승계·해제) 실측 OK. 테스트 +16 → **158개**. docs/02·03·05·06·사용법 갱신.
+- 다음: 폰 APK 재설치 → **2단계 GitHub 원격(사용자 생성 중) → 3단계 VM(사용자) → 4단계 서버 설치(Claude)** → 단계 B/Phase 6 장기 테스트는 클라우드에서.
 
 ### 세션 2026-09-03 (라이브 검증 + 전략 정교화 + 사용법 문서)
 - **Phase 2 완료:** 키움 왕복주문 실증(매수→미체결→취소, ord_no 0074195).
@@ -235,7 +237,7 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **저가 반등 × 진입기준 상호작용** — 반등(`entry_rebound_pct`) 후 현재가 하락비율이 `entry_drop_pct` 안쪽으로 올라오면 **매수 안 됨**(현재가 기준 게이트가 먼저 적용, 저점도 리셋). 기준 30%·반등 2%면 실효 기준 ≈ 31.4%↓ 저점에서만 매수. "저점이 구간 안이었으면 반등 후 기준 이탈해도 매수" 로 바꿀지 사용자 판단 대기(2026-09-03).
 - **백그라운드 푸시(FCM)** — Phase 5-B 미채택(보류). 필요 시 재검토.
 - **키움 정정 TR(kt10002)** 미검증 — 취소+재주문으로 대체 가능.
-- **포지션 전략상태(분할매수 횟수·고점) 영속화 / 오프라인 버퍼** — 재시작 시 근사 복원. 후속.
+- **오프라인 버퍼**(네트워크 끊김 시 밀린 상태 재전송) — 후속. (전략상태 영속화는 2026-09-03 완료)
 
 ---
 

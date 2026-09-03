@@ -163,6 +163,13 @@ create table devices (
 
 ---
 
+### 2b. 추가 테이블 (`0005_bot_lock_strategy_state.sql`, 2026-09-03)
+| 테이블 | 용도 | 키 |
+|---|---|---|
+| `bot_lock` | 이중 실행 방지 락. `holder_id`(봇 인스턴스), `heartbeat_at`. 함수 `acquire_bot_lock`/`release_bot_lock`(봇 전용, security definer) | id=1 단일행 |
+| `strategy_state` | 종목별 전략상태 영속화: `entries_done`·`invested_krw`·`partial_sold`·`peak_since_partial`(포지션), `zone_low`(매수구간 저점, 미보유 후보도). 변경 시 upsert, 청산·저점 리셋 시 삭제. 봇 시작 시 복원 | (owner, code) |
+둘 다 RLS select(본인) 만. `bot_lock` 은 Realtime publication 포함(앱 표시 후속). 상세: docs/05 §4, docs/03 §2.2b.
+
 ## 3. RLS 정책 (`0002_rls.sql`)
 
 ```sql

@@ -106,6 +106,28 @@ class Relay:
         res = self.sb.table("settings").select("*").eq("id", 1).limit(1).execute()
         return res.data[0] if res.data else {}
 
+    # ── 전략상태 영속화(strategy_state) ───────────────
+    def load_strategy_states(self) -> list[dict]:
+        res = self.sb.table("strategy_state").select("*").eq("owner", self.owner).execute()
+        return res.data or []
+
+    def save_strategy_state(self, code: str, **fields: Any) -> None:
+        row = {"owner": self.owner, "code": code, "updated_at": _now(), **fields}
+        self.sb.table("strategy_state").upsert(row, on_conflict="owner,code").execute()
+
+    def delete_strategy_state(self, code: str) -> None:
+        self.sb.table("strategy_state").delete().eq("owner", self.owner).eq("code", code).execute()
+
+    # ── 이중 실행 방지 락(bot_lock) ───────────────────
+    def acquire_lock(self, holder: str, stale_sec: int = 90) -> bool:
+        """획득 또는 갱신(내가 보유 중이면 heartbeat 갱신). 다른 봇이 살아있으면 False."""
+        res = self.sb.rpc("acquire_bot_lock", {
+            "p_owner": self.owner, "p_holder": holder, "p_stale_sec": stale_sec}).execute()
+        return bool(res.data)
+
+    def release_lock(self, holder: str) -> None:
+        self.sb.rpc("release_bot_lock", {"p_owner": self.owner, "p_holder": holder}).execute()
+
     # ── 명령 구독(폴링) ───────────────────────────────
     def start_command_listener(self, handler: Callable[[dict], Optional[str]],
                                interval: float = 1.5) -> None:
