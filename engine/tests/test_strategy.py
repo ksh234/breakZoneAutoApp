@@ -82,10 +82,18 @@ class TestShouldEnter:
         assert not d.enter  # 9600 > lower 9500
 
     def test_new_reject_status_pending(self):
+        # pending = T-5 종가 미확정 → 해제금액 부정확 → 매수 금지
         d = should_enter(drop_ratio=35, status="pending", price=9000, env=self._env(),
                          params=_params(), state=PositionState("x"), holding=False,
                          avg_price=None, positions_cnt=0, cash=1_000_000)
         assert not d.enter
+
+    def test_new_entry_partial_allowed(self):
+        # partial(T-5 확정, 현재가 등만 누락) → 해제금액 정확 → 매수 허용
+        d = should_enter(drop_ratio=35, status="partial", price=9000, env=self._env(),
+                         params=_params(), state=PositionState("x"), holding=False,
+                         avg_price=None, positions_cnt=0, cash=1_000_000)
+        assert d.enter and d.kind == "new"
 
     def test_new_reject_max_positions(self):
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),

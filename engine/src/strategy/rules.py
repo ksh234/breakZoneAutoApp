@@ -58,10 +58,13 @@ def should_enter(
     if qty < 1:
         return _no_enter("주문가능수량 0(현금/예산 부족)")
 
+    # 해제금액 확정 게이트: T-5(D-5) 종가가 확정돼야 해제금액이 정확 →
+    # pending(T-5 미확정)이면 신규·추가 매수 모두 금지. (사용자 규칙, 2026-09-03)
+    if status == "pending":
+        return _no_enter("해제금액 미확정(T-5 종가 대기)")
+
     if not holding:
         # E1 · 신규 진입
-        if status != "ok":
-            return _no_enter(f"status={status}")
         if drop_ratio is None:
             return _no_enter("drop_ratio 없음")
         if drop_ratio < params.entry_drop_pct:
