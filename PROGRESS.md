@@ -14,7 +14,7 @@
 | **마지막 업데이트** | 2026-09-03 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
 | **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **142개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
-| **다음 마일스톤** | **단계 B 본편** — 폰/PC 앱에서 자동매매 ON → 첫 모의매매 관찰(장중). 그다음 Phase 6(백테스트·모의검증). |
+| **다음 마일스톤** | **클라우드 이관(Phase 8 앞당김, D-015)** — 락·영속화 → GitHub → VM 배포. 그 위에서 단계 B 첫 모의매매 관찰 + Phase 6 장기 검증. |
 | **블로커** | 없음. (첫 매매 관찰은 장중 필요) |
 
 ---
@@ -80,7 +80,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **사용자 질문(반등 규칙):** 기준 30%·반등 2%에서 반등으로 30% 안쪽이 되면? → 코드상 `should_enter`가 현재가 drop_ratio ≥ 기준을 먼저 검사하므로 **매수 안 됨**, `_update_candidate_lows`가 저점도 리셋. 실효 기준 ≈ 31.4%. §열려있는 질문에 기록, 규칙 변경 여부는 사용자 결정.
 - **Supabase CLI 도입:** v2.116.0 설치(`D:/dev/supabase`, PATH) + `supabase init`(config.toml 커밋). 사용자 `login`(브라우저 승인) + `link`(DB 비밀번호 불필요 — 토큰 기반 login role). Claude가 `migration repair --status applied 0001~0004` → `migration list` 로컬=원격 일치, `db push --dry-run` up to date. **이후 마이그레이션은 Claude가 `supabase db push`로 직접 적용.**
 - **🐛 설정 미반영 버그 발견·수정:** 앱 설정 저장이 settings update 만 하고 `set_param` 명령을 안 보냄 + 봇은 시작/`set_param` 때만 로드 → 실행 중 봇에 "자동매매 ON" 이 영영 미반영(단계 B 절차가 그대로 실패할 상황). 수정 ① 봇 `PARAMS_RELOAD_SEC=30` 주기 재로드(정지/장외에도, 변경 시만 "설정 반영" 이벤트) ② 앱 저장 직후 `set_param` 명령 전송. 테스트 +5 → **142개**. APK 재빌드(arm64 17.9MB) → **폰 재설치 필요**.
-- 다음: 폰 APK 재설치 → 단계 B 첫 모의매매 관찰(장중) → Phase 6.
+- **결정(사용자):** D-014 단일 사용자 유지 / D-015 **클라우드 이관을 장기 테스트 앞으로**(Docker 생략, 국내 VM, git 재배포). 선행: bot_lock 락 + 상태 영속화 + GitHub 원격.
+- 다음: 폰 APK 재설치 → **클라우드 이관 작업(§다음에 할 일)** → 단계 B/Phase 6 장기 테스트는 클라우드에서.
 
 ### 세션 2026-09-03 (라이브 검증 + 전략 정교화 + 사용법 문서)
 - **Phase 2 완료:** 키움 왕복주문 실증(매수→미체결→취소, ord_no 0074195).
@@ -207,6 +208,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 | D-011 | 브로커 = 동기(requests) REST + 스레드 WebSocket | ✅ 확정 |
 | D-012 | 명령 수신 = 폴링(스레드 1.5초), Realtime 후속 | ✅ 확정 |
 | D-013 | 매매 전략(진입/청산) 사용자 정의 — 수치 전부 조절가능 | 🟡 초안(Phase 6 백테스트로 튜닝 후 확정) |
+| D-014 | 단일 사용자 유지(다중 사용자 미지원) | ✅ 확정(사용자, 2026-09-03) |
+| D-015 | 클라우드 이관을 장기 테스트 앞으로(venv+systemd, 국내 VM, git 재배포) | ✅ 확정(사용자, 2026-09-03) |
 
 ---
 
