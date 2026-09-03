@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..analysis import pykrx_fetcher
 from ..analysis.calculator import compute_drop_ratio
-from ..analysis.candidates import Candidate, build_candidates
+from ..analysis.candidates import Candidate, build_candidates, compute_status
 from ..broker.base import BrokerAdapter
 from ..broker.errors import BrokerError
 from ..broker.models import OrderType, Position, Side
@@ -88,6 +88,7 @@ class StrategyEngine:
                 if p:
                     c.current_price = p
                     c.drop_ratio = compute_drop_ratio(c.release_amount, p)
+                    c.status = compute_status(c.t5_close, c.t15_close, c.recent_15_high, p)
         except Exception:
             logger.exception("후보 현재가 조회 실패")
         self.candidates = {c.code: c for c in cands if c.code}
@@ -170,6 +171,7 @@ class StrategyEngine:
             if p and p != cand.current_price:
                 cand.current_price = p
                 cand.drop_ratio = compute_drop_ratio(cand.release_amount, p)
+                cand.status = compute_status(cand.t5_close, cand.t15_close, cand.recent_15_high, p)
                 changed.append(cand)
         if changed:
             try:

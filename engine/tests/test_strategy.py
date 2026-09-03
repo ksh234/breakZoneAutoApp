@@ -88,12 +88,12 @@ class TestShouldEnter:
                          avg_price=None, positions_cnt=0, cash=1_000_000)
         assert not d.enter
 
-    def test_new_entry_partial_allowed(self):
-        # partial(T-5 확정, 현재가 등만 누락) → 해제금액 정확 → 매수 허용
+    def test_new_reject_partial(self):
+        # partial(값 하나라도 누락) → 해제금액/하락비율 부정확 → 매수 금지
         d = should_enter(drop_ratio=35, status="partial", price=9000, env=self._env(),
                          params=_params(), state=PositionState("x"), holding=False,
                          avg_price=None, positions_cnt=0, cash=1_000_000)
-        assert d.enter and d.kind == "new"
+        assert not d.enter
 
     def test_new_reject_max_positions(self):
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),

@@ -53,6 +53,17 @@ class Candidate:
         return d
 
 
+def compute_status(t5_close, t15_close, recent_15_high, current_price) -> str:
+    """후보 상태. 해제금액·하락비율이 정확하려면 4개 값 모두 필요.
+    pending(T-5 미확정) / partial(T-5 있으나 T-15·최고가·현재가 중 누락) / ok(모두 확정).
+    """
+    if t5_close is None:
+        return "pending"
+    if t15_close is None or recent_15_high is None or current_price is None:
+        return "partial"
+    return "ok"
+
+
 def build_candidates(
     *, today: Optional[date] = None, fetch_current_price: bool = True,
 ) -> list[Candidate]:
@@ -145,13 +156,7 @@ def _compute_candidate(
 
     drop_ratio = calculator.compute_drop_ratio(release_amount, current)
 
-    # 상태 결정 (breakZone 과 동일 기준)
-    if close_t5 is None:
-        status = "pending"
-    elif close_t15 is None or not recent_highs or current is None:
-        status = "partial"
-    else:
-        status = "ok"
+    status = compute_status(close_t5, close_t15, prices["price_3"], current)
 
     return Candidate(
         code=stock.code, name=stock.name,
