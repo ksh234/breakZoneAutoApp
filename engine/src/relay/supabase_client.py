@@ -59,6 +59,16 @@ class Relay:
             rows.append(row)
         self.sb.table("candidates").upsert(rows, on_conflict="owner,code").execute()
 
+    def remove_candidate(self, code: str) -> None:
+        self.sb.table("candidates").delete().eq("owner", self.owner).eq("code", code).execute()
+
+    def prune_candidates(self, keep_codes: list[str]) -> None:
+        """현재 후보 목록에 없는 후보 행 삭제(스테일 정리). keep_codes 비면 전체 삭제."""
+        q = self.sb.table("candidates").delete().eq("owner", self.owner)
+        if keep_codes:
+            q = q.not_.in_("code", keep_codes)
+        q.execute()
+
     def upsert_positions(self, positions: list[Position]) -> None:
         rows = [{
             "owner": self.owner, "code": p.code, "name": p.name, "qty": p.qty,

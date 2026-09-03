@@ -57,7 +57,8 @@ def main() -> int:
     )
     relay.upsert_candidates([dummy])
     relay.insert_event("test", "info", "스모크 테스트", "relay 동작 확인")
-    print("    OK")
+    relay.remove_candidate("005930")   # 더미 후보 즉시 정리(앱에 안 남게)
+    print("    OK (더미 후보는 정리됨)")
 
     print("[4] settings 로드(StrategyParams)…")
     from src.strategy.params import StrategyParams

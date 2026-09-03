@@ -94,8 +94,9 @@ class StrategyEngine:
         self.candidates = {c.code: c for c in cands if c.code}
         try:
             self.relay.upsert_candidates(cands)
+            self.relay.prune_candidates(list(self.candidates.keys()))  # 경고 해제된 스테일 후보 정리
         except Exception:
-            logger.exception("candidates upsert 실패")
+            logger.exception("candidates upsert/정리 실패")
         self._recompute_indicators()
         self._resubscribe()
 
