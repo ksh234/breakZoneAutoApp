@@ -88,6 +88,30 @@ class TestShouldEnter:
                          avg_price=None, positions_cnt=0, cash=1_000_000)
         assert not d.enter
 
+    def test_rebound_blocks_at_low(self):
+        # 저가=현재가 (반등 0%) → 매수 안 함 (급락 중 매수 방지)
+        p = _params(entry_rebound_pct=0.03)
+        d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
+                         params=p, state=PositionState("x"), holding=False, avg_price=None,
+                         positions_cnt=0, cash=1_000_000, low_price=9000)
+        assert not d.enter
+
+    def test_rebound_triggers_buy(self):
+        # 저가 9000 대비 현재가 9300 = +3.3% ≥ 3% → 매수 (env 하단 9500 아래)
+        p = _params(entry_rebound_pct=0.03)
+        d = should_enter(drop_ratio=35, status="ok", price=9300, env=self._env(),
+                         params=p, state=PositionState("x"), holding=False, avg_price=None,
+                         positions_cnt=0, cash=1_000_000, low_price=9000)
+        assert d.enter and d.kind == "new"
+
+    def test_rebound_no_low_waits(self):
+        # 저점 미형성(low None) + 반등 요구 → 대기
+        p = _params(entry_rebound_pct=0.03)
+        d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
+                         params=p, state=PositionState("x"), holding=False, avg_price=None,
+                         positions_cnt=0, cash=1_000_000, low_price=None)
+        assert not d.enter
+
     def test_reject_release_passed(self):
         # 해제일 지난 종목 → 신규매수 제외 (다른 조건 다 맞아도)
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),

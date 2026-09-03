@@ -43,6 +43,7 @@ class StrategyEngine:
         self._day = None
         self._subscribed: set[str] = set()
         self._entry_blocked = False
+        self.candidate_lows: dict[str, int] = {}   # 매수구간 종목별 저점(저가 반등 매수용)
 
     # ── 수명주기 / 명령 ───────────────────────────────
     def load_params(self) -> None:
@@ -137,6 +138,7 @@ class StrategyEngine:
             return
         self.sync_positions()
         self._sync_candidate_display()
+        self._update_candidate_lows()
         pending = self._pending_codes()
         self._evaluate_exits(pending)
         self._evaluate_entries(pending)
@@ -179,6 +181,22 @@ class StrategyEngine:
                 self.relay.upsert_candidates(changed)
             except Exception:
                 logger.exception("후보 현재가 갱신 실패")
+
+    def _update_candidate_lows(self) -> None:
+        """매수구간(drop_ratio≥기준) 종목의 저점을 추적. 구간 벗어나면 리셋. (저가 반등 매수용)"""
+        for code in list(self.candidate_lows):
+            if code not in self.candidates:
+                self.candidate_lows.pop(code, None)
+        for code, cand in self.candidates.items():
+            price = self.broker.cached_price(code) or cand.current_price
+            if not price:
+                continue
+            dr = cand.drop_ratio
+            if dr is not None and dr >= self.params.entry_drop_pct:
+                prev = self.candidate_lows.get(code)
+                self.candidate_lows[code] = min(prev, price) if prev else price
+            else:
+                self.candidate_lows.pop(code, None)
 
     def _pending_codes(self) -> set[str]:
         try:
@@ -241,7 +259,7 @@ class StrategyEngine:
                 env=self.envelopes.get(code), params=self.params, state=st,
                 holding=holding, avg_price=pos.avg_price if pos else None,
                 positions_cnt=len(self.positions), cash=cash,
-                release_passed=release_passed)
+                release_passed=release_passed, low_price=self.candidate_lows.get(code))
             if not d.enter or code in pending:
                 continue
             r = ok_buy(qty=d.qty, price=price, params=self.params, cash=cash,

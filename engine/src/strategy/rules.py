@@ -38,7 +38,7 @@ def should_enter(
     *, drop_ratio: Optional[float], status: str, price: Optional[int],
     env: Optional[Envelope], params: StrategyParams, state: PositionState,
     holding: bool, avg_price: Optional[int], positions_cnt: int, cash: int,
-    release_passed: bool = False,
+    release_passed: bool = False, low_price: Optional[int] = None,
 ) -> EnterDecision:
     """매수 판정. 신규 진입(E1) 또는 추가매수/물타기(E2)."""
     if not params.enabled:
@@ -73,6 +73,10 @@ def should_enter(
             return _no_enter("drop_ratio 없음")
         if drop_ratio < params.entry_drop_pct:
             return _no_enter(f"drop_ratio {drop_ratio} < 기준 {params.entry_drop_pct}")
+        # 저점 반등 확인: 매수구간 저가 대비 entry_rebound_pct 이상 상승해야 매수(급락 중 매수 방지)
+        if params.entry_rebound_pct > 0:
+            if not low_price or price < low_price * (1 + params.entry_rebound_pct):
+                return _no_enter(f"저점 반등 대기(저가 {low_price} 대비 +{params.entry_rebound_pct:.0%} 미달)")
         if not (price < env.lower):
             return _no_enter("현재가가 envelope 하단 위")
         if positions_cnt >= params.max_positions:

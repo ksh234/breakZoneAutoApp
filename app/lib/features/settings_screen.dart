@@ -11,7 +11,8 @@ const _specs = <(String, String, String, bool, num)>[
   ('기본 설정', 'max_unrealized_loss_krw', '평가손실 매수중단 한도(원) — 보유 평가손실이 이만큼이면 신규매수 중단', true, 500000),
   ('기본 설정', 'tick_seconds', '평가 주기(초)', true, 5),
   // 매수 설정
-  ('매수 설정', 'entry_drop_pct', '진입 하락비율 기준(%) — 해제가 대비 이 % 이상 하락 시 매수', false, 30),
+  ('매수 설정', 'entry_drop_pct', '진입 하락비율 기준(%) — 해제가 대비 이 % 이상 하락해야 매수구간', false, 30),
+  ('매수 설정', 'entry_rebound_pct', '저가 반등 매수(0~1, 0.03=3%) — 저점서 이만큼 오르면 매수, 0=즉시', false, 0.0),
   ('매수 설정', 'per_stock_krw', '종목당 총 투자액(원)', true, 1000000),
   ('매수 설정', 'entry_split_pct', '1회 매수 비중 (0~1, 0.3=30%)', false, 0.30),
   ('매수 설정', 'max_entries', '최대 분할매수 횟수', true, 4),
