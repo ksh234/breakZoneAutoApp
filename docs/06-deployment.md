@@ -77,3 +77,29 @@ CMD ["python", "-m", "src.main"]
 ## 7. 롤백
 
 - 문제 발생 시: 앱/서버에서 **kill(전량청산+정지)** → 원인분석 → 이전 안정 버전으로 재배포. 스키마 파괴적 변경은 역마이그레이션 준비.
+
+---
+
+## 부록 A. VM 생성 가이드 (사용자 직접, 2026-09-03)
+
+### A-1. Oracle Cloud 무료 티어 (1순위)
+1. cloud.oracle.com Sign Up. **Home Region = South Korea Central (Seoul)** (가입 후 변경 불가). 휴대폰 인증 + 신용카드(확인용 소액 승인 후 취소, Always Free 는 청구 없음).
+2. 가입 후 Billing → **Upgrade to Pay As You Go** 권장: Always Free 는 그대로 무료이면서, 무료 계정의 "7일간 저사용(CPU/네트워크 <20%) VM 회수" 정책에서 제외됨(봇은 저부하라 회수 위험).
+3. Compute → Instances → Create instance
+   - Name `breakzone-bot` · Image: Canonical **Ubuntu 24.04**
+   - Shape: **Ampere VM.Standard.A1.Flex (1 OCPU / 6GB)** → "Out of capacity" 면 **VM.Standard.E2.1.Micro** (x86 1GB)
+   - Networking: 기본 VCN, **Assign a public IPv4 address 켜기**
+   - SSH: **Generate a key pair for me** → private/public 저장 → private key 를 작업 PC `C:\Users\ksh23\.ssh\` 에 보관(재발급 불가)
+   - Boot volume 기본(47GB) · Create → RUNNING 후 **Public IP** 메모
+4. 방화벽: 변경 불필요(봇 outbound-only, SSH 22 기본 허용).
+5. 접속 확인(PowerShell): `ssh -i C:\Users\ksh23\.ssh\<key> ubuntu@<IP>` → `yes` → 프롬프트 확인 → `exit`.
+   "UNPROTECTED PRIVATE KEY FILE" 오류 시: `icacls "<key경로>" /inheritance:r /grant:r "${env:USERNAME}:R"`
+
+### A-2. AWS Lightsail 서울 (2순위, 월 $5)
+1. AWS 가입(카드) → Lightsail → Create instance → 리전 **Seoul(ap-northeast-2)** → Linux → OS Only → **Ubuntu 24.04** → **$5 플랜(1GB)** → 이름 `breakzone-bot`.
+2. Account → SSH keys → `LightsailDefaultKey-ap-northeast-2.pem` 다운로드 → `.ssh` 로.
+3. Networking → **Create static IP** 부착(재시작 시 IP 고정, 부착 중 무료).
+4. 사용자명 `ubuntu`. 접속 확인은 A-1 §5 와 동일.
+
+### A-3. Claude 에게 전달할 것
+공인 IP · 사용자명 · `.ssh` 의 키 파일명. **개인키 내용은 전달 금지.** 이후 설치(`infra/server/setup.sh`)·`.env` 배치·스모크·서비스 시작은 Claude 가 SSH 로 수행(§4).
