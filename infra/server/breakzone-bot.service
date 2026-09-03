@@ -11,6 +11,8 @@ WorkingDirectory=/opt/breakZoneAutoApp/engine
 # .env 는 코드(python-dotenv)가 engine/.env 에서 읽음. 시크릿은 유닛 파일에 넣지 않는다.
 Environment=TZ=Asia/Seoul
 Environment=PYTHONUNBUFFERED=1
+# 파일 로그 끔 — journald 가 stdout 을 수집(journalctl -u breakzone-bot)
+Environment=LOG_DIR=0
 ExecStart=/opt/breakZoneAutoApp/engine/.venv/bin/python -m src.main
 # Ctrl+C 와 동일하게 안전 종료(락 해제·WS·리스너 정리) 유도
 KillSignal=SIGINT

@@ -43,6 +43,7 @@ BOT_DRY_RUN = _get("BOT_DRY_RUN", "0").lower() in ("1", "true", "yes")  # 1=주�
 
 # ── 기타 ──
 LOG_LEVEL = _get("LOG_LEVEL", "INFO").upper()
+LOG_DIR = _get("LOG_DIR", "logs")      # 회전 로그 파일 폴더(engine/ 기준 상대경로). 0=파일 로그 끔(journald 등)
 
 
 def require(*names: str) -> None:

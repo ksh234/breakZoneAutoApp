@@ -87,11 +87,29 @@ class LockKeeper:
                 pass
 
 
+def _setup_logging() -> None:
+    """콘솔 + 회전 파일(engine/logs/bot.log, 5MB×10). LOG_DIR=0 이면 파일 생략(systemd/journald 환경)."""
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    root.addHandler(sh)
+    logging.getLogger("httpx").setLevel(logging.WARNING)   # supabase 요청 로그(매 tick) 소음 제거
+    if config.LOG_DIR.lower() not in ("0", "off", "none"):
+        from logging.handlers import RotatingFileHandler
+        from pathlib import Path
+        d = Path(config.LOG_DIR)
+        if not d.is_absolute():
+            d = Path(__file__).resolve().parents[1] / d
+        d.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(d / "bot.log", maxBytes=5_000_000, backupCount=10, encoding="utf-8")
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
+
+
 def main() -> int:
-    logging.basicConfig(
-        level=getattr(logging, config.LOG_LEVEL, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _setup_logging()
     log = logging.getLogger("main")
 
     try:

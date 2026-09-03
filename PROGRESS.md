@@ -23,7 +23,7 @@
 
 **🙋 단계 B 본편 — 첫 모의매매 관찰 (평일 장중 09:00~15:30, 집 PC = LIVE 봇)**
 0. **폰에 새 APK 재설치**(설정 저장 → set_param 명령 전송 수정본. `app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`, 2026-09-03 16:11 빌드)
-1. 봇 실행: `cd engine; .\.venv\Scripts\python.exe -m src.main` (터미널 계속 켜둠). 로그에 **"락 획득(<PC호스트명>)"** 확인. PC `.env` 는 `BOT_DRY_RUN` 없음/0 유지(PC 가 아직 운용 봇).
+1. 봇 실행: 바탕화면 **`breakZone 봇 시작.bat`** 더블클릭(= `engine/run_bot.bat`). 로그에 **"락 획득(ksh)"** 확인. 로그 파일 `engine/logs/bot.log`. PC `.env` 는 `BOT_DRY_RUN` 없음/0 유지(PC 가 아직 운용 봇).
 2. 앱(폰/PC): 제어 → **시작** → 설정 → **자동매매 활성화 ON** → 저장 → 이벤트 탭에 **"설정 반영 enabled=True"** 뜨는지 확인(이게 안 뜨면 설정 미반영 버그 재발).
 3. 관찰: 후보 탭에 **상태 "정상" + 하락 30%↑** 종목이 매수 후보. 조건 맞으면 주문/포지션에 뜸. 매수 시 `strategy_state` 에 행 생성됨(Supabase 대시보드로 확인 가능).
 4. 이상 시 제어 → **긴급정지(kill)**.
@@ -89,7 +89,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **클라우드 이관 1단계 완료(봇 준비):** ① `bot_lock` 락(마이그레이션 0005, DB 함수 acquire/release, `main.LockKeeper`: 획득→LIVE / 실패→관찰 대기·15초 재시도·stale 90초 승계 / 갱신 실패→관찰+critical) ② `strategy_state` 영속화(분할횟수·투자액·분할매도·고점·저점, 변경 시 저장, 시작 시 복원) ③ `BOT_DRY_RUN` 드라이런(`DryRunRelay` 쓰기 전부 무시, 주문은 `[DRY]` 로그, 명령 리스너 off). **CLI `db push` 로 0005 원격 적용** + 원격 락 스모크(획득·갱신·승계·해제) 실측 OK. 테스트 +16 → **158개**. docs/02·03·05·06·사용법 갱신.
 - **2단계 GitHub 원격 완료:** 사용자가 private 저장소 생성 + 첫 push(브라우저 인증) → 이후 Claude 셸에서 비대화 push 가능. 원격에 시크릿 파일 없음 확인. `infra/server/`(setup.sh·systemd 유닛·deploy.sh) + `.gitattributes`(sh/service/sql LF) 추가.
 - **3단계 VM 보류:** Oracle 무료티어 가입 화면에 한국 리전(서울/춘천) 미제공 → 해외 리전은 KRX/KIND 차단 위험이라 비권장. 대안(Lightsail 서울 월 $5 / Oracle 재시도 / Azure) 제시 → 사용자 "나중에 다시". docs/06 부록 A 에 VM 생성 가이드 저장.
-- 세션 종료 상태: 커밋 44개, origin/main 동기화. 테스트 158개. 다음 세션 = 집 PC 단계 B(장중) 또는 VM 재개.
+- **집 PC 실행 편의:** `engine/run_bot.bat` + 바탕화면 `breakZone 봇 시작.bat`(호출용). main.py 에 회전 파일 로그(`engine/logs/bot.log`, `LOG_DIR=0` 이면 끔 — 서버 유닛은 journald 사용), httpx 요청 로그 WARNING 으로. bat 실전 실행 확인(토큰→설정→락 획득→LIVE→리스너), 테스트 후 락 해제.
+- 세션 종료 상태: origin/main 동기화. 테스트 158개. 다음 세션 = 집 PC 단계 B(장중, bat 로 실행) 또는 VM 재개.
 
 ### 세션 2026-09-03 (라이브 검증 + 전략 정교화 + 사용법 문서)
 - **Phase 2 완료:** 키움 왕복주문 실증(매수→미체결→취소, ord_no 0074195).
