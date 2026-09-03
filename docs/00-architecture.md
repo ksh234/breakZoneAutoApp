@@ -92,20 +92,18 @@ any ──fatal error──▶ error(자동정지+알림)
 
 | 영역 | 선택 | 비고 |
 |---|---|---|
-| 봇 | Python 3.11+, asyncio | 시세 WS + 명령 구독 동시성 |
+| 봇 | Python 3.12, **동기 requests + 스레드**(D-011/D-012) | 메인 tick 루프 + WS 수신 스레드 + 명령 폴링 스레드 |
 | 크롤/분석 | requests, beautifulsoup4, pykrx, finance-datareader, holidays | breakZone 그대로 |
 | 브로커 | 키움 REST/WebSocket | docs/01 |
 | DB/중계 | Supabase(Postgres, Realtime, Edge Functions/Deno) | docs/02 |
 | 앱 | Flutter, Riverpod, supabase_flutter, fl_chart (+ 선택: firebase_messaging) | docs/04 |
-| 배포 | Docker, 국내 VPS 또는 AWS/GCP 서울 | docs/06 |
+| 배포 | 국내 리전 VM + venv + systemd (Docker 보류, D-015) | docs/06 |
 
-## 7. 동시성 모델 (봇)
+## 7. 동시성 모델 (봇) — 실제 구현 (D-011·D-012, 2026-09-03 현행화)
 
-`asyncio` 단일 이벤트 루프 권장:
-- Task 1: 매매 루프(주기 tick).
-- Task 2: 키움 WebSocket 시세 수신 → 최신가 캐시.
-- Task 3: Supabase commands 구독 → 명령 큐.
-- Task 4: 하트비트.
-- pykrx/requests(동기)는 `run_in_executor`로 감싸 블로킹 회피. (breakZone은 순차처리로 pykrx hang을 피했음 — 병렬화 시 주의: docs/03)
-
-공유 상태(포지션·설정·상태기계)는 단일 루프 내 소유로 락 최소화. 외부 명령은 큐로 직렬화.
+초기 설계는 asyncio 였으나 **동기 + 스레드**로 구현했다(단순·견고, pykrx/requests 동기 라이브러리와 궁합).
+- **메인 스레드:** `main.py` 루프 — `LockKeeper.tick()`(락 갱신 15초) → `engine.tick()`(tick_seconds=5초: 설정 재로드 30초 주기 → 포지션 동기화 → 청산 평가 → 진입 평가 → 하트비트) → 장중 10분마다 `refresh()`(후보·지표).
+- **WS 스레드:** `KiwoomRestBroker` 가 실시간 체결가를 캐시에 기록. 엔진은 `get_price`(캐시 우선, REST 폴백)로 읽음.
+- **명령 폴링 스레드:** `Relay.start_command_listener` 가 1.5초마다 `commands(pending)` 조회 → ack → `engine.handle_command` → done/failed. (Realtime 구독은 후속)
+- 공유 상태(포지션·설정·상태기계)는 메인 스레드가 소유. 명령 핸들러는 상태 플래그·파라미터만 바꾸고 무거운 일은 tick 에서 처리.
+- **LIVE / 관찰(드라이런):** `engine.live` 플래그. False 면 주문 함수는 `[DRY]` 로그만, `relay` 는 `DryRunRelay`(쓰기 무시)로 교체 → 락 미획득 인스턴스·`BOT_DRY_RUN=1` 인스턴스가 운용 봇의 상태를 덮어쓰지 않음(docs/05 §4).

@@ -7,7 +7,7 @@
 
 ---
 
-## 진행 현황 (2026-09-02)
+## 진행 현황 (2026-09-03)
 
 | Phase | 내용 | 상태 |
 |---|---|---|
@@ -21,8 +21,8 @@
 | 7 | 실계좌 전환 | ⬜ 신중히 |
 | 8 | 클라우드 이관 | 🟡 **진행 중(D-015 앞당김)** — 1단계 봇 준비(락·영속화·드라이런) ✅, GitHub/VM/배포 ⬜ |
 
-**코드 규모:** 봇(engine) Python — analysis/broker/relay/strategy + 테스트 **137개 통과**. 앱(app) Flutter — 7화면, 폰 APK 배포 완료. 사용법: [사용법.md](사용법.md).
-**남은 라이브 확인:** 단계 B 본편 — 자동매매 ON으로 **첫 모의매매 관찰**(장중). 이후 Phase 6.
+**코드 규모:** 봇(engine) Python — analysis/broker/relay(+DryRun)/strategy + 테스트 **158개 통과**. 앱(app) Flutter — 7화면, 폰 APK 배포 완료. 서버 자산 `infra/server/`. 원격 `github.com/ksh234/breakZoneAutoApp`. 사용법: [사용법.md](사용법.md).
+**남은 라이브 확인:** 단계 B 본편 — 자동매매 ON으로 **첫 모의매매 관찰**(장중, 집 PC). VM 생성 후 클라우드 전환 → Phase 6.
 
 ---
 
@@ -104,9 +104,12 @@ breakZoneAutoApp/
 │   │   │   ├── rules.py           # 순수 규칙 함수 (테스트 가능)
 │   │   │   └── risk.py            # 리스크 한도, kill-switch
 │   │   ├── relay/
-│   │   │   └── supabase_client.py # 상태 push, commands subscribe
+│   │   │   ├── supabase_client.py # 상태 push · commands 폴링 · 락 · 전략상태
+│   │   │   └── dry_run.py         # DryRunRelay (쓰기 무시 — 관찰/드라이런)
 │   │   └── backtest/
-│   │       └── runner.py
+│   │       └── runner.py          # (Phase 6, 미작성)
+│   ├── tools/                     # check_kiwoom_token · check_supabase · it_kiwoom
+│   ├── run_bot.bat                # 집 PC 런처
 │   └── tests/
 ├── app/                           ← Flutter 앱 (flutter create 산출물)
 │   └── lib/ ...
@@ -115,8 +118,7 @@ breakZoneAutoApp/
 │   ├── functions/                 # Edge Functions (선택: push-notify — Phase 5에서 결정)
 │   └── config.toml
 └── infra/
-    ├── Dockerfile                 # engine 컨테이너화 (클라우드 이관용)
-    └── docker-compose.yml
+    └── server/                    # VM 설치 setup.sh · systemd 유닛 · deploy.sh (Docker 는 보류, D-015)
 ```
 
 `breakZone/` 폴더는 **그대로 유지**(분석 검증/참조용). 엔진은 breakZone 코드를 `engine/src/analysis/` 로 **복사·이식**하고, 이후 독립적으로 관리한다(양쪽을 동기화하려 하지 말 것 — 이식 시점 스냅샷으로 고정).
@@ -154,11 +156,11 @@ breakZoneAutoApp/
 **산출물:** 개발환경, 발급된 키 목록(§secrets), 채워진 키움 스펙 표.
 
 **완료 기준**
-- [ ] `python --version` 3.11+, `flutter doctor` 통과, `supabase --version` 동작
-- [ ] 키움 모의투자 App Key/Secret 로 **접근토큰 발급 성공**(curl/Postman로 1회 확인)
-- [ ] 키움 모의계좌 **잔고조회 200 응답** 확인
-- [ ] Supabase 프로젝트에 접속(대시보드) + CLI 로컬 링크 완료
-- [ ] docs/01 "확정 스펙" 표의 모든 칸이 실제 값으로 채워짐
+- [x] `python` 3.12 / Flutter 3.47 / `supabase` CLI 2.116 동작 (CLI 는 2026-09-03 설치)
+- [x] 키움 모의투자 App Key/Secret 로 **접근토큰 발급 성공** (2026-09-01)
+- [x] 키움 모의계좌 **잔고조회 200 응답** (Phase 2, 예탁 5천만 확인)
+- [x] Supabase 프로젝트 접속 + CLI 로컬 링크 (2026-09-03, 마이그레이션 이력 repair 완료)
+- [~] docs/01 "확정 스펙" 표 — 토큰·주문·잔고·현재가·WS 형식 채움. **Rate limit·동시구독 한도는 미실측**(보수적 5/s 유지)
 
 ---
 
@@ -224,7 +226,7 @@ breakZoneAutoApp/
 **완료 기준**
 - [x] 모든 테이블·RLS·Realtime 적용됨 (마이그레이션 3종, 2026-09-02 라이브 확인)
 - [x] 봇이 outbound 연결만으로 state push 성공 (check_supabase.py: 하트비트·후보·이벤트 upsert 확인)
-- [~] `commands` INSERT → 봇 수신 (폴링 1.5초 구현, `--listen` 실증은 사용자 선택 확인)
+- [x] `commands` INSERT → 봇 수신 (폴링 1.5초. 단계 A 라이브 실증 2026-09-02: 앱 시작/정지 → 봇 반응)
 - [ ] 네트워크 끊김 후 자동 재연결 + 밀린 상태 재전송 (오프라인 버퍼는 후속 — Phase 4/8에서 보강)
 
 ---
@@ -319,11 +321,13 @@ breakZoneAutoApp/
 ### Phase 8 — 클라우드 이관 🟡
 **목표:** 봇을 집 PC에서 상시 클라우드로 이전(상시성·안정성 확보).
 
-**작업** (상세: [docs/06-deployment.md](docs/06-deployment.md))
-1. `infra/Dockerfile` 로 엔진 컨테이너화(pykrx/네트워크 의존성 포함).
-2. 국내 VPS 또는 AWS/GCP(서울 리전) VM에 배포. 시크릿은 환경변수/시크릿매니저.
-3. 프로세스 관리(systemd/컨테이너 재시작 정책) + 로그 수집 + 하트비트 모니터.
-4. 집 PC ↔ 클라우드 **동시 구동 방지**(같은 계좌 이중 주문 방지 락 — docs/05).
+**작업** (상세: [docs/06-deployment.md](docs/06-deployment.md) §4·부록 A. D-015: Docker 보류, venv+systemd)
+1. [x] 봇 준비: 이중 실행 락 `bot_lock` + 전략상태 영속화 `strategy_state` + 드라이런 `BOT_DRY_RUN` (2026-09-03)
+2. [x] GitHub private 원격 + `infra/server/`(setup.sh · breakzone-bot.service · deploy.sh) (2026-09-03)
+3. [ ] 서울 리전 VM 생성(사용자) — Oracle 무료티어 한국 리전 미제공으로 보류. 대안 Lightsail 서울 $5
+4. [ ] 서버 설치(setup.sh) → `.env` 배치 → 스모크(키움·Supabase·KIND) → `systemctl start`
+5. [ ] 전환: 집 PC 봇 종료 → 클라우드 LIVE 확인 → PC `.env` `BOT_DRY_RUN=1`
+6. 재배포 = `deploy.sh`(장 마감 후). 이후 단계 B / Phase 6 장기 검증은 클라우드에서.
 
 **완료 기준**
 - [ ] 클라우드에서 봇이 무중단 구동(재부팅 자동복구)
@@ -346,8 +350,10 @@ breakZoneAutoApp/
 | 키 | 용도 | 보관 |
 |---|---|---|
 | `KIWOOM_APP_KEY` / `KIWOOM_SECRET` (demo/real 각각) | 키움 인증 | engine `.env`(개발), 실전은 OS 키체인 |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | 봇→DB(쓰기) | engine `.env` |
-| `SUPABASE_ANON_KEY` | 앱→DB | Flutter(공개 가능, RLS로 보호) |
+| `SUPABASE_URL` / `SUPABASE_SECRET_KEY`(`sb_secret_…`, legacy service_role 폴백) / `SUPABASE_OWNER_UUID` | 봇→DB(쓰기) | engine `.env`(PC·서버) |
+| Supabase publishable key(`sb_publishable_…`, 구 anon) | 앱→DB | `app/lib/core/env.dart`(gitignore, RLS로 보호) |
+| Supabase CLI 액세스 토큰 | 마이그레이션 push | CLI 가 OS 저장소에 보관(`supabase login`) |
+| VM SSH 개인키 | 서버 접속 | 작업 PC `~/.ssh/` 만. 채팅·깃 금지 |
 | Firebase `google-services.json` / 서비스계정 | FCM 푸시 — **선택(Phase 5-B 채택 시에만)** | 앱 / Edge Function 시크릿 |
 
 `.gitignore` 에 `.env`, `*.local`, `google-services*.json`, 키 파일 포함(§Phase 0).

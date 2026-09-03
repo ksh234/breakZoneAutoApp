@@ -14,8 +14,9 @@ pip install -r requirements.txt
 copy .env.example .env    # 키 채우기 (KIWOOM_*, SUPABASE_*)
 python -m src.main
 ```
-- `.env`: `KIWOOM_MODE=demo`, `KIWOOM_APP_KEY/SECRET`, `KIWOOM_ACCOUNT_NO`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, 로그레벨 등.
-- 로그: `logs/engine.log`(RotatingFileHandler, breakZone `run.py` 방식 재사용).
+- `.env`: `KIWOOM_MODE=demo`, `KIWOOM_APP_KEY/SECRET`, `KIWOOM_ACCOUNT_NO`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_OWNER_UUID`, `BOT_*`(락·드라이런), `LOG_LEVEL`, `LOG_DIR`. 전체 목록 `engine/.env.example`.
+- 로그: `engine/logs/bot.log`(RotatingFileHandler 5MB×10, `LOG_DIR=0` 이면 끔). 콘솔에도 동일 출력.
+- **집 PC 런처:** `engine/run_bot.bat`(바탕화면 `breakZone 봇 시작.bat` 이 호출). Ctrl+C 안전 종료(락 해제).
 
 ## 2. 집 Windows PC 상시(간헐) 구동
 

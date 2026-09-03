@@ -36,8 +36,15 @@ KRX 투자경고종목(경고주)을 분석해 **자동매매**하는 시스템.
 ## 키움 스펙 주의
 ROADMAP/docs의 도메인·TR코드·호출한도 값은 **자리표시자**다. 코딩 전 `openapi.kiwoom.com` 공식 문서와 공식 SDK(`github.com/Kiwoom-Securities/Kiwoom-REST-API`)로 **실측해 `docs/01`의 스펙 표를 채운다.**
 
-## 현재 상태
-설계 완료, 구현 착수 전. 다음 할 일 = **ROADMAP Phase 0**(환경 구축 + 키 발급 + 키움 스펙 실측).
+## 현재 상태 (2026-09-03)
+**Phase 0~5 구현 완료** (봇: analysis/broker/relay/strategy + 테스트 158개, 앱: Flutter 7화면 + 폰 APK). 키움 왕복주문·봇↔Supabase↔앱 제어 라이브 실증 완료. **Phase 8 클라우드 이관을 앞당겨 진행 중**(D-015): 락·영속화·드라이런·GitHub 원격 완료, VM 생성은 사용자 보류. 다음 할 일은 **PROGRESS.md §다음에 할 일**이 SSOT.
+
+## 작업 환경 메모 (Claude용)
+- **문서/코드 다중 편집은 scratchpad 에 python 스크립트로 작성 후 실행**한다. Bash 툴 히어독은 백슬래시·따옴표가 깨지는 사례 있음(2026-09-03). 단일 치환은 Edit 툴.
+- **`git push` 는 단독 명령으로 실행**(commit 과 한 줄에 묶으면 자동모드 분류기가 차단). 커밋 메시지는 `-F <파일>`.
+- Supabase 스키마 변경 = `supabase/migrations/NNNN_*.sql` 작성 → `D:\dev\supabase\supabase.exe db push` (CLI link 완료, DB 비밀번호 불필요).
+- 봇 실행/검증: `engine/run_bot.bat`(바탕화면 `breakZone 봇 시작.bat`). 테스트 `engine/.venv/Scripts/python.exe -m pytest -q`. Flutter는 `D:\dev\flutter\bin\flutter.bat` 전체경로.
+- 요청 범위 밖 코드 변경은 먼저 물어본다(사용자 피드백 2026-09-03).
 
 ## 환경
 - OS: Windows. 셸은 PowerShell(주) / Bash 병행. 경로는 절대경로 선호.

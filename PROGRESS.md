@@ -73,24 +73,63 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - [x] **Phase 3: Supabase 마이그레이션(7테이블+RLS+Realtime) + Relay 중계 + 라이브 검증** ✅
 - [x] **Phase 4: 전략 엔진(규칙·리스크·엔진·main) + 사용자 전략 확정·정교화 + 단계 A 제어 실증** ✅
 - [x] **Phase 5: Flutter 앱 7화면 + 안드로이드 APK 폰 설치·로그인 정상** ✅
-- [x] 테스트 **137개** 통과. 사용법 문서([사용법.md](사용법.md)).
+- [x] 사용법 문서([사용법.md](사용법.md)). 설정 미반영 버그 수정(봇 30초 재로드 + 앱 set_param 전송) + APK 재빌드
+- [x] **Supabase CLI** 설치·link·마이그레이션 이력 repair → 이후 스키마 변경은 `db push`
+- [x] **Phase 8 클라우드 이관 1·2단계:** 이중 실행 락 `bot_lock` · 전략상태 영속화 `strategy_state` · 드라이런 `BOT_DRY_RUN` · GitHub private 원격 · `infra/server/` 설치 자산 · 집 PC 런처 bat + 파일 로그
+- [x] 테스트 **158개** 통과. 문서-실제 정합성 점검(2026-09-03 저녁)
 
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
 
-### 세션 2026-09-03 (새 세션 — 상태 분석·문서 정리)
-- 전체 실측: 테스트 137개 통과, `.env`/`env.dart` 존재, git clean(37커밋). 문서-코드 일치 확인.
-- PROGRESS 하단 3구역(결정 요약·환경 현황·열린 질문) 최신화 — D-007/D-008 확정 반영, git init 등 완료 항목 제거.
-- **사용자 질문(반등 규칙):** 기준 30%·반등 2%에서 반등으로 30% 안쪽이 되면? → 코드상 `should_enter`가 현재가 drop_ratio ≥ 기준을 먼저 검사하므로 **매수 안 됨**, `_update_candidate_lows`가 저점도 리셋. 실효 기준 ≈ 31.4%. §열려있는 질문에 기록, 규칙 변경 여부는 사용자 결정.
-- **Supabase CLI 도입:** v2.116.0 설치(`D:/dev/supabase`, PATH) + `supabase init`(config.toml 커밋). 사용자 `login`(브라우저 승인) + `link`(DB 비밀번호 불필요 — 토큰 기반 login role). Claude가 `migration repair --status applied 0001~0004` → `migration list` 로컬=원격 일치, `db push --dry-run` up to date. **이후 마이그레이션은 Claude가 `supabase db push`로 직접 적용.**
-- **🐛 설정 미반영 버그 발견·수정:** 앱 설정 저장이 settings update 만 하고 `set_param` 명령을 안 보냄 + 봇은 시작/`set_param` 때만 로드 → 실행 중 봇에 "자동매매 ON" 이 영영 미반영(단계 B 절차가 그대로 실패할 상황). 수정 ① 봇 `PARAMS_RELOAD_SEC=30` 주기 재로드(정지/장외에도, 변경 시만 "설정 반영" 이벤트) ② 앱 저장 직후 `set_param` 명령 전송. 테스트 +5 → **142개**. APK 재빌드(arm64 17.9MB) → **폰 재설치 필요**.
-- **결정(사용자):** D-014 단일 사용자 유지 / D-015 **클라우드 이관을 장기 테스트 앞으로**(Docker 생략, 국내 VM, git 재배포). 선행: bot_lock 락 + 상태 영속화 + GitHub 원격.
-- **클라우드 이관 1단계 완료(봇 준비):** ① `bot_lock` 락(마이그레이션 0005, DB 함수 acquire/release, `main.LockKeeper`: 획득→LIVE / 실패→관찰 대기·15초 재시도·stale 90초 승계 / 갱신 실패→관찰+critical) ② `strategy_state` 영속화(분할횟수·투자액·분할매도·고점·저점, 변경 시 저장, 시작 시 복원) ③ `BOT_DRY_RUN` 드라이런(`DryRunRelay` 쓰기 전부 무시, 주문은 `[DRY]` 로그, 명령 리스너 off). **CLI `db push` 로 0005 원격 적용** + 원격 락 스모크(획득·갱신·승계·해제) 실측 OK. 테스트 +16 → **158개**. docs/02·03·05·06·사용법 갱신.
-- **2단계 GitHub 원격 완료:** 사용자가 private 저장소 생성 + 첫 push(브라우저 인증) → 이후 Claude 셸에서 비대화 push 가능. 원격에 시크릿 파일 없음 확인. `infra/server/`(setup.sh·systemd 유닛·deploy.sh) + `.gitattributes`(sh/service/sql LF) 추가.
-- **3단계 VM 보류:** Oracle 무료티어 가입 화면에 한국 리전(서울/춘천) 미제공 → 해외 리전은 KRX/KIND 차단 위험이라 비권장. 대안(Lightsail 서울 월 $5 / Oracle 재시도 / Azure) 제시 → 사용자 "나중에 다시". docs/06 부록 A 에 VM 생성 가이드 저장.
-- **집 PC 실행 편의:** `engine/run_bot.bat` + 바탕화면 `breakZone 봇 시작.bat`(호출용). main.py 에 회전 파일 로그(`engine/logs/bot.log`, `LOG_DIR=0` 이면 끔 — 서버 유닛은 journald 사용), httpx 요청 로그 WARNING 으로. bat 실전 실행 확인(토큰→설정→락 획득→LIVE→리스너), 테스트 후 락 해제.
-- 세션 종료 상태: origin/main 동기화. 테스트 158개. 다음 세션 = 집 PC 단계 B(장중, bat 로 실행) 또는 VM 재개.
+### 세션 2026-09-03 저녁 (상태 분석 → 설정버그 수정 → Supabase CLI → 클라우드 이관 1·2단계 → 문서 정합성)
+커밋 범위 `61e162d`…(이 항목 커밋) / 원격 `github.com/ksh234/breakZoneAutoApp` main 동기화. 테스트 137 → **158개**.
+
+**A. 상태 분석·문서 정리**
+- 세션 시작 실측: 테스트 137 통과, `.env`/`env.dart` 존재, git clean. 문서-코드 일치.
+- PROGRESS 하단 3구역(결정 요약·환경 현황·열린 질문) 현행화(D-007/D-008 확정 반영, 완료 항목 제거).
+- **사용자 질문(저가 반등 × 진입기준):** 기준 30%·반등 2% 설정에서 반등으로 30% 안쪽이 되면? → `should_enter` 가 현재가 drop_ratio ≥ 기준을 먼저 검사 → **매수 안 됨**, `_update_candidate_lows` 가 저점도 리셋. 실효 기준 ≈ 31.4%. 30~31.4% 구간에서 오르내리는 종목은 계속 놓침. 규칙 변경("저점이 구간 안이면 반등 후 이탈해도 매수") 여부는 사용자 판단 대기 → §열려있는 질문.
+
+**B. 설정 미반영 버그 수정 (앱→봇)**
+- 발견: 앱 설정 저장이 `settings` update 만 하고 `set_param` 명령을 안 보냄 + 봇은 시작/`set_param` 때만 로드 → 실행 중 봇에 "자동매매 ON" 미반영(단계 B 절차 자체가 실패할 상황).
+- 수정 ① 봇: `PARAMS_RELOAD_SEC=30` 주기 재로드(정지/장외 포함), 값 변경 시만 "설정 반영 <diff>" 이벤트, `set_param` 은 변경 여부 반환. ② 앱: 저장 직후 `sendCommand('set_param')`.
+- 테스트 +5(142). `flutter analyze` 0, APK 재빌드(arm64 17.9MB) 전달 → **폰 재설치 필요(미완)**.
+
+**C. Supabase CLI 도입**
+- v2.116.0 단일 실행파일 `D:\dev\supabase`(winget/scoop 없음 → GitHub 릴리스), 사용자 PATH, `supabase init`(config.toml 커밋).
+- 사용자 `supabase login`(브라우저 승인) + `supabase link --project-ref ftfamqtxiaygbmnfuowt`. **DB 비밀번호 불필요**(신 CLI 는 액세스 토큰으로 login role 생성).
+- Claude: `migration repair --status applied 0001 0002 0003 0004` → `migration list` 로컬=원격 → `db push --dry-run` up to date. 이후 마이그레이션은 `db push` 로 직접 적용.
+
+**D. 결정 (사용자 확정)**
+- 질문 "계정 늘리면 다른 사람도 별도 계좌로 자동매매?" → 현재 settings/bot_state id=1 단일행 + 봇 1프로세스=계좌 1개라 불가. 확장안(owner 키 스키마 + 사람별 봇) 제시. **D-014 단일 사용자 유지.**
+- 질문 "장기 테스트 전에 클라우드로 옮기는 게 어떤가 / 옮긴 뒤 수정하면 계속 옮겨야 하나" → 찬성. 재배포 = `git pull`+재시작 한 줄(Claude 가 SSH). **D-015 Phase 8 앞당김**(Docker 생략, 국내 VM, venv+systemd). 선행 필수: 락·영속화·GitHub.
+- 질문 "락 우선순위·PC 테스트 방법" → 락은 선착순 유지(우선순위 없음), PC 는 `BOT_DRY_RUN=1` 드라이런으로 판정만 관찰. 주문 경로 실증 필요 시 클라우드 서비스 잠시 정지.
+- 질문 "VM/Supabase 는 웹서버/DB 서버?" → Supabase=백엔드 전부(DB+인증+실시간), VM 봇=요청 안 받는 워커, 키움=외부 결제사 API 격. 설명만(문서 변경 없음).
+
+**E. 클라우드 이관 1단계 — 봇 준비 (커밋 faf6bfd)**
+- 마이그레이션 **0005** `bot_lock`(id=1, holder_id, heartbeat_at) + `acquire_bot_lock(owner,holder,stale_sec)`(INSERT…ON CONFLICT DO UPDATE…WHERE 원자적, 획득=갱신, stale 승계) / `release_bot_lock`. security definer + anon/authenticated 실행 권한 revoke. `strategy_state`(owner,code: entries_done·invested_krw·partial_sold·peak_since_partial·zone_low). 둘 다 RLS select 본인. `db push` 로 원격 적용, **원격 락 스모크**(A획득→B실패→A갱신→stale0 B승계→A실패→해제→A재획득) 실측 OK.
+- relay: `acquire_lock/release_lock`(rpc), `load/save/delete_strategy_state`. **`DryRunRelay`**(읽기 위임·쓰기 무시).
+- engine: `set_live(bool)`(relay 교체), `restore_state()`, `_persist_state(code)`(매수·분할매도·고점 변경·저점 변경 시 저장, 청산/리셋 시 삭제), `_dry_log`(종목·사유당 하루 1회 `[DRY]`), kill/close_position 드라이런 차단.
+- main: **`LockKeeper`**(start: 획득→`go_live`(싱글턴·복원·리스너·"봇 LIVE" 이벤트) / 실패→관찰; tick: 15초마다 갱신·재시도, 승계 시 LIVE, 갱신 실패 시 "락 상실" critical + 관찰; release). `BOT_DRY_RUN=1` 이면 락 무관 관찰 + status=running. config: `BOT_HOLDER_ID`(호스트명), `BOT_LOCK_STALE_SEC=90`, `BOT_LOCK_RENEW_SEC=15`.
+- 테스트 +16(158): 락 rpc·strategy_state·DryRunRelay·드라이런 엔진·영속화/복원·LockKeeper. docs/02·03·05·06·사용법 갱신.
+
+**F. 클라우드 이관 2단계 — GitHub 원격 (커밋 de83601~)**
+- `infra/server/setup.sh`(Ubuntu 22.04/24.04: python3.12·bot 사용자·/opt clone·venv·systemd 등록) · `breakzone-bot.service`(Restart=always, SIGINT 안전종료, KST, LOG_DIR=0→journald) · `deploy.sh`(pull→deps 변경 시 설치→pytest -x→restart). `.gitattributes`(sh/service/sql LF).
+- 사용자 private 저장소 생성 → `git remote add origin` → **첫 push 는 사용자 터미널**(Claude 셸은 브라우저 인증 불가) → 이후 Claude 비대화 push OK. 원격에 시크릿 없음 확인. `gh` CLI 없음(불필요).
+- 자동모드 메모: `git push` 를 다른 명령과 한 줄에 묶으면 분류기 차단 → 단독 실행.
+
+**G. 3단계 VM — 보류**
+- Oracle 무료티어 가입 화면에 한국 리전(서울/춘천) 미제공. 해외 리전은 KRX/KIND 해외 IP 차단 위험 → 비권장. 대안: Lightsail 서울(월 $5, 확실) / 며칠 뒤 Oracle 재시도(PAYG 업그레이드·E2.1.Micro 권장, A1 불필요) / Azure 무료 12개월. 사용자 "나중에 다시". docs/06 **부록 A** VM 생성 가이드.
+- 부수 질문: 오라클@AWS 서울 기사 → 기업용 DB 상품, 무관. Lightsail $5 에 다른 앱도 올릴 수 있는가 → 가벼운 것은 가능, 게임서버는 메모리 부족, 실계좌 땐 봇 전용 권장.
+
+**H. 집 PC 실행 편의 (커밋 cd43d2f)**
+- 요청: 바탕화면 봇 실행 bat. 산출: `engine/run_bot.bat` + 바탕화면 `breakZone 봇 시작.bat`(호출용).
+- 추가(요청 범위 밖 → 사용자 확인 후 유지): main.py 회전 파일 로그(`engine/logs/bot.log` 5MB×10, `LOG_DIR`), httpx 로그 WARNING. **피드백: 요청 밖 변경은 먼저 물어볼 것**(메모리 저장).
+- bat 실전 실행 확인: 토큰→설정 로드→락 획득(ksh)→LIVE→명령 리스너. 강제 종료 후 락 수동 해제. 로그로 확인한 현재 설정: enabled=True, entry_rebound_pct=0.02, per_stock_krw=1,000만(사용자 의도 확인됨), add_on_drop_pct=0.05.
+
+**I. 문서-실제 정합성 점검 (이 항목)**
+- 수정: CLAUDE.md/README/engine README "설계 완료·Phase 0" 문구 → 현행. ROADMAP 진행현황 날짜·158개·Phase 0 완료기준·Phase 3 명령수신·Phase 8 작업(venv+systemd)·§3 구조도·§6 시크릿 표(secret/publishable). docs/00 §6·§7 asyncio → 동기+스레드 실제 모델. docs/01 §3.4 스레드. docs/06 §1 .env·로그·bat. PHASE0-CHECKLIST 완료 항목 체크(Supabase·CLI·주문 TR·게이트), 미실측(rate limit·동시구독 한도) 명시.
+- CLAUDE.md 에 "작업 환경 메모"(스크립트 편집·push 단독·CLI·bat) 추가.
 
 ### 세션 2026-09-03 (라이브 검증 + 전략 정교화 + 사용법 문서)
 - **Phase 2 완료:** 키움 왕복주문 실증(매수→미체결→취소, ord_no 0074195).

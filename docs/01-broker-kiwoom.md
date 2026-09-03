@@ -160,7 +160,7 @@ class KiwoomRestBroker(BrokerAdapter):
 ### 3.4 실시간 시세 (WebSocket)
 - `connect()` 에서 WS 연결 → 로그인/인증 메시지(표) → watchlist 등록.
 - 수신 틱 → `self._prices[code]=price` + `on_tick` 콜백.
-- **자동 재연결:** 끊기면 백오프 후 재연결 + 재구독. `asyncio` Task로 상시 유지.
+- **자동 재연결:** 끊기면 백오프 후 재연결 + 재구독. **백그라운드 스레드**로 상시 유지(D-011).
 - 동시구독 한도 초과 방지: watchlist(후보+보유) 상한 관리, 초과 시 REST 폴백.
 
 ### 3.5 조회

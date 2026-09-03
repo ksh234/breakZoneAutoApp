@@ -25,5 +25,8 @@ KRX 투자경고종목(경고주)을 분석해 **자동매매**하는 시스템.
 ## ⚠️ 주의
 실제 자금이 오가는 자동매매입니다. **모의투자로 충분히 검증하기 전 실계좌 금지**(ROADMAP Phase 6·7). 리스크 가드·kill-switch·시크릿 관리는 선택이 아니라 전제입니다.
 
-## 현재 상태
-설계 단계 완료. 구현은 새 PC의 새 세션에서 ROADMAP Phase 0부터 진행 예정. (`breakZone`, `breakZoneAutoApp` 폴더를 새 PC로 이동)
+## 현재 상태 (2026-09-03)
+Phase 0~5 구현 완료(봇 + Flutter 앱, 키움 모의 왕복주문·앱 제어 라이브 실증). 클라우드 이관(Phase 8) 진행 중 — 봇 준비(이중 실행 락·상태 영속화·드라이런)와 GitHub 원격까지 완료, VM 생성 대기. 상세는 [`PROGRESS.md`](PROGRESS.md).
+
+- 실행: 바탕화면 `breakZone 봇 시작.bat`(= `engine/run_bot.bat`) → 앱에서 시작/정지.
+- 원격: `github.com/ksh234/breakZoneAutoApp`(private). 서버 설치: `infra/server/`.
