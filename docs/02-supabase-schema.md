@@ -242,24 +242,24 @@ serve(async (req) => {
 
 ---
 
-## 7. 봇 클라이언트 (`relay/supabase_client.py`) 계약
+## 7. 봇 클라이언트 (`relay/supabase_client.py`) 계약 — 실제 구현(동기, 2026-09-04 현행화)
 
 ```python
-class Relay:
-    async def connect(self): ...
-    async def push_bot_state(self, **fields): ...        # upsert id=1
-    async def upsert_candidates(self, rows: list[dict]): ...
-    async def upsert_positions(self, rows: list[dict]): ...
-    async def remove_position(self, code: str): ...
-    async def insert_order(self, order: dict) -> str: ...
-    async def update_order(self, id: str, **fields): ...
-    async def insert_event(self, type, severity, title, message="", payload=None): ...
-    async def subscribe_commands(self, handler): ...     # realtime INSERT → handler
-    async def ack_command(self, id, status, result=""): ...
-    async def load_settings(self) -> dict: ...
+class Relay:                      # 동기(requests 기조, D-011). 모든 호출은 _exec() 경유(락 + 재시도)
+    ensure_singletons()           # settings/bot_state id=1 보장
+    push_bot_state(**fields)      # 하트비트 upsert
+    upsert_candidates(cands) / remove_candidate(code) / prune_candidates(keep)
+    upsert_positions(pos) / remove_position(code)
+    insert_order(order) -> id / update_order(id, **f)
+    insert_event(type, severity, title, message="", payload=None)
+    load_settings() -> dict
+    load_strategy_states() / save_strategy_state(code, **f) / delete_strategy_state(code)
+    acquire_lock(holder, stale_sec=90) -> bool / release_lock(holder)      # rpc acquire/release_bot_lock
+    start_command_listener(handler, interval=1.5) / ack_command(id, status, result) / stop()   # 폴링 스레드(D-012)
+class DryRunRelay(real)           # 읽기 위임·쓰기 무시 (관찰/드라이런)
 ```
-- 파이썬 Supabase 라이브러리(`supabase-py`/`realtime-py`) 사용. Realtime 미지원 상황 대비 **폴백 폴링**(commands를 2초 주기 select) 옵션 유지.
-- 오프라인 버퍼: 네트워크 끊김 시 이벤트/상태를 로컬 큐에 쌓고 재연결 시 flush.
+- **통신 안정화(2026-09-04):** supabase-py 기본 HTTP/2 세션을 두 스레드가 공유하면 `Server disconnected` 간헐 발생 → 생성 직후 같은 base_url·헤더의 **HTTP/1.1 세션**(timeout 15/5s, keepalive 15s)으로 교체(`_harden_http`), 모든 요청 **스레드 락 직렬화** + `httpx.TransportError` 시 세션 재생성 후 **1회 재시도**(`_exec`). 라이브러리 자체 재시도는 GET 503/520 한정이라 의존하지 않음.
+- Realtime 구독은 후속. 오프라인 버퍼(끊김 시 큐잉·flush)는 미구현(후속).
 
 ---
 

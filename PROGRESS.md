@@ -11,9 +11,9 @@
 
 | 항목 | 값 |
 |---|---|
-| **마지막 업데이트** | 2026-09-03 |
+| **마지막 업데이트** | 2026-09-04 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
-| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **158개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
+| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **166개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
 | **다음 마일스톤** | ① 집 PC 에서 **단계 B 첫 모의매매 관찰**(장중, 새 코드) ② **클라우드 VM 생성(사용자 보류 중)** → 서버 설치·전환 → Phase 6 장기 검증 |
 | **블로커** | VM 생성 보류(사용자 "나중에"). Oracle 무료티어는 가입 시 한국 리전 미제공 상태였음(2026-09-03). 대안: 며칠 뒤 Oracle 재시도 / AWS Lightsail 서울(월 $5) / Azure 무료 12개월. |
 
@@ -26,6 +26,7 @@
 1. 봇 실행: 바탕화면 **`breakZone 봇 시작.bat`** 더블클릭(= `engine/run_bot.bat`). 로그에 **"락 획득(ksh)"** 확인. 로그 파일 `engine/logs/bot.log`. PC `.env` 는 `BOT_DRY_RUN` 없음/0 유지(PC 가 아직 운용 봇).
 2. 앱(폰/PC): 제어 → **시작** → 설정 → **자동매매 활성화 ON** → 저장 → 이벤트 탭에 **"설정 반영 enabled=True"** 뜨는지 확인(이게 안 뜨면 설정 미반영 버그 재발).
 3. 관찰: 후보 탭에 **상태 "정상" + 하락 30%↑** 종목이 매수 후보. 조건 맞으면 주문/포지션에 뜸. 매수 시 `strategy_state` 에 행 생성됨(Supabase 대시보드로 확인 가능).
+3-b. 장 마감 후 로그 점검: `engine/logs/bot.log` 에서 `disconnected`·`재시도` 검색 → 0건이면 통신 안정화(2026-09-04) 확인 완료. 종료 후 앱 상태가 **stopped** 로 바뀌는지 확인.
 4. 이상 시 제어 → **긴급정지(kill)**.
 > 조건이 까다로워 당장 매매 없을 수 있음(정상). 핵심은 봇이 안 죽고 조건 맞으면 주문 나가는지.
 > ⚠️ 저가 반등 2% + 기준 30% 조합은 실효 기준 ≈31.4%(§열려있는 질문). 관찰 중 매수가 안 나오면 이 영향일 수 있음.
@@ -45,7 +46,7 @@
 ```powershell
 # 봇
 cd D:\myWorkspace\breakZoneAutoApp\engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 158개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 166개
 .\.venv\Scripts\python.exe -m src.main                      # 봇 실행(장중)
 # 앱
 cd D:\myWorkspace\breakZoneAutoApp\app
@@ -81,6 +82,15 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-09-04 오전 (첫 장중 실행 로그 분석 → Supabase 통신 안정화)
+- **첫 장중 실행(집 PC, bat):** 08:55 시작 → 08:56 앱 "시작" 수신 → 10:27 Ctrl+C 종료. 후보 19종목 10분 주기 갱신 정상. **매수·매도 0건**(진입 조건 충족 종목 없음, 차단·tick 오류 없음). 사용자 "봇이 이상한 것 같다" → 로그 분석.
+- **이상 1 — Supabase 쓰기 간헐 실패(실제 버그):** 09:01~10:27 `httpx.RemoteProtocolError: Server disconnected` — 명령 폴링 경고 52회, `strategy_state` 저장 실패 19회, 하트비트·후보갱신 실패 각 1회, 종료 시 `cannot receive data before headers` 1회. 원인: supabase-py(2.31) postgrest 세션이 **HTTP/2 + 두 스레드(메인 tick·명령 폴링) 공유**, 유휴 연결 서버 종료/동시 사용 시 오류. 라이브러리 재시도는 GET 503/520 만 → 쓰기는 즉시 실패. 피해: 명령은 다음 폴링에 재수신(유실 없음), 저점 저장 실패로 `strategy_state` 비어 복원 신뢰 불가. 주문 기록 쓰기가 걸렸다면 앱에 안 보이는 주문 가능성 → 장기 운용 전 필수 수정.
+- **이상 2 — 종료 후 앱에 running 잔존:** 종료 시 status 를 안 바꿔 bot_state=running + 하트비트 정지 상태로 표시(사용자가 느낀 "이상"의 직접 원인 추정).
+- **수정(사용자 승인, 커밋 참조):** ① `Relay._harden_http()` — 생성 직후 postgrest 세션을 같은 base_url·헤더의 **HTTP/1.1 httpx.Client**(timeout 15/5s, keepalive 15s, 연결 4)로 교체 ② `Relay._exec()` — 모든 요청을 `threading.Lock` 으로 직렬화 + `httpx.TransportError` 시 세션 재생성 후 **1회 재시도**(비전송 오류는 재시도 안 함) ③ `main.shutdown()` — status=stopped 하트비트 push → "봇 종료" 이벤트 → 락 해제.
+- **검증:** 라이브 스모크(세션 교체·헤더 유지·쓰기·락·20초 유휴 후 재사용 OK, bot_state=stopped 반영) + **60초 2스레드 스트레스**(폴링 1.5초 + 하트비트/상태저장 5~22초 유휴 포함: 폴링 39·하트비트 8·저장 8·락 2 전부 성공, 재시도 0). 테스트 +8 → **166개**.
+- 재시도 시 쓰기 중복 가능성(주문/이벤트 행 중복)은 "유실보다 낫다"로 수용. 관찰 항목으로 기록.
+- 다음: 다음 장중 실행에서 `Server disconnected` 경고가 사라졌는지 로그 확인(`Select-String bot.log -Pattern 'disconnected|재시도'`).
 
 ### 세션 2026-09-03 저녁 (상태 분석 → 설정버그 수정 → Supabase CLI → 클라우드 이관 1·2단계 → 문서 정합성)
 커밋 범위 `61e162d`…(이 항목 커밋) / 원격 `github.com/ksh234/breakZoneAutoApp` main 동기화. 테스트 137 → **158개**.

@@ -108,6 +108,18 @@ def _setup_logging() -> None:
         root.addHandler(fh)
 
 
+def shutdown(engine: StrategyEngine, lock: "LockKeeper | None") -> None:
+    """안전 종료: status=stopped 를 DB 에 반영(앱이 'running+오래된 하트비트' 로 남지 않게) → 이벤트 → 락 해제."""
+    engine.status = "stopped"
+    try:
+        engine._heartbeat(False)
+    except Exception:
+        pass
+    engine._emit("state", "info", "봇 종료", "프로세스 정리 (status=stopped)")
+    if lock:
+        lock.release()
+
+
 def main() -> int:
     _setup_logging()
     log = logging.getLogger("main")
@@ -170,9 +182,7 @@ def main() -> int:
     except KeyboardInterrupt:
         log.info("종료 신호 수신 — 정리 중…")
     finally:
-        engine._emit("state", "info", "봇 종료", "프로세스 정리")
-        if lock:
-            lock.release()
+        shutdown(engine, lock)
         try:
             relay.stop()
         except Exception:
