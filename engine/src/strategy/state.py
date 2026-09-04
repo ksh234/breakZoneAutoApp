@@ -11,6 +11,7 @@ class PositionState:
     invested_krw: int = 0        # 누적 매수금액(종목당 총액 상한 체크용)
     partial_sold: bool = False   # 첫 분할매도(익절) 실행 여부
     peak_since_partial: int = 0  # 분할매도 이후 고점(트레일링 기준)
+    partial_sell_price: int = 0  # 1차(분할) 매도 가격 — 2차 상승 전량매도 기준(post_sell_gain_pct)
 
     def on_buy(self, qty: int, price: int) -> None:
         self.entries_done += 1
@@ -18,6 +19,7 @@ class PositionState:
 
     def on_partial_sell(self, price: int) -> None:
         self.partial_sold = True
+        self.partial_sell_price = price
         self.peak_since_partial = max(self.peak_since_partial, price)
 
     def update_peak(self, price: int) -> None:

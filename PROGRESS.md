@@ -13,7 +13,7 @@
 |---|---|
 | **마지막 업데이트** | 2026-09-04 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
-| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **166개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
+| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **172개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
 | **다음 마일스톤** | ① 집 PC 에서 **단계 B 첫 모의매매 관찰**(장중, 새 코드) ② **클라우드 VM 생성(사용자 보류 중)** → 서버 설치·전환 → Phase 6 장기 검증 |
 | **블로커** | VM 생성 보류(사용자 "나중에"). Oracle 무료티어는 가입 시 한국 리전 미제공 상태였음(2026-09-03). 대안: 며칠 뒤 Oracle 재시도 / AWS Lightsail 서울(월 $5) / Azure 무료 12개월. |
 
@@ -46,7 +46,7 @@
 ```powershell
 # 봇
 cd D:\myWorkspace\breakZoneAutoApp\engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 166개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 172개
 .\.venv\Scripts\python.exe -m src.main                      # 봇 실행(장중)
 # 앱
 cd D:\myWorkspace\breakZoneAutoApp\app
@@ -91,6 +91,8 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **검증:** 라이브 스모크(세션 교체·헤더 유지·쓰기·락·20초 유휴 후 재사용 OK, bot_state=stopped 반영) + **60초 2스레드 스트레스**(폴링 1.5초 + 하트비트/상태저장 5~22초 유휴 포함: 폴링 39·하트비트 8·저장 8·락 2 전부 성공, 재시도 0). 테스트 +8 → **166개**.
 - 재시도 시 쓰기 중복 가능성(주문/이벤트 행 중복)은 "유실보다 낫다"로 수용. 관찰 항목으로 기록.
 - 다음: 다음 장중 실행에서 `Server disconnected` 경고가 사라졌는지 로그 확인(`Select-String bot.log -Pattern 'disconnected|재시도'`).
+- **질문 2건(설명만):** ① `min_price`=1,000 → 현재가 1,000원 **미만** 매수 안 함(1,000원은 허용), 신규·추가매수 공통, 0=무제한. ② 분할익절 후 재상승 시 → 분할익절은 1회, 이후 잔량은 트레일링/상한가만(+15% 재검사 없음).
+- **전략 추가(사용자 요청, D-013 보강) — X2b 2차 상승 전량매도:** `post_sell_gain_pct`(%) 신규. 분할매도 후 **1차 매도가 대비** 이 % 이상 → 잔량 전량. 기본 0=끔 → **앱 설정 "2차 상승 전량매도(%)" 에 수치 입력 필요**. 우선순위 상한가 → 2차 상승 → 트레일링. `PositionState.partial_sell_price` + 마이그레이션 **0006**(strategy_state 컬럼) CLI 적용. 앱 설정 항목 16개 → APK 재빌드(**폰 재설치 필요**). 테스트 +6. docs/03 §2.2·§2.2b·§6, 사용법 §5·§8, DECISIONS 갱신.
 
 ### 세션 2026-09-03 저녁 (상태 분석 → 설정버그 수정 → Supabase CLI → 클라우드 이관 1·2단계 → 문서 정합성)
 커밋 범위 `61e162d`…(이 항목 커밋) / 원격 `github.com/ksh234/breakZoneAutoApp` main 동기화. 테스트 137 → **158개**.

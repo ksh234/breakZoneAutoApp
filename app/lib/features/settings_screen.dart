@@ -21,6 +21,7 @@ const _specs = <(String, String, String, bool, num)>[
   ('매도 설정', 'take_profit_pct', '분할익절 수익률(%)', false, 15),
   ('매도 설정', 'first_sell_portion', '첫 분할매도 비중 (0~1, 0.5=50%)', false, 0.50),
   ('매도 설정', 'post_sell_stop_pct', '분할매도후 하락 전량 (0~1, 0.05=5%)', false, 0.05),
+  ('매도 설정', 'post_sell_gain_pct', '2차 상승 전량매도(%) — 1차 매도가 대비 이만큼 오르면 잔량 전량 (0=끔)', false, 0),
   ('매도 설정', 'limit_up_pct', '급등 전량매도 기준(%) (예 29≈상한가)', false, 29),
   // Envelope 지표
   ('Envelope 지표', 'env_period', 'Envelope 기간(일)', true, 20),

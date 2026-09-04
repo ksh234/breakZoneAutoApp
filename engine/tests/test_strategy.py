@@ -219,6 +219,40 @@ class TestShouldExit:
                         params=_params(), state=st, at_limit_up=True)
         assert d.exit and d.reason == "limit_up" and d.qty == 50
 
+    # X2b · 2차 상승 전량매도 (2026-09-04)
+    def test_post_sell_gain_sells_all(self):
+        p = _params(post_sell_gain_pct=10)
+        st = PositionState("005930", partial_sold=True, peak_since_partial=12500, partial_sell_price=12000)
+        d = should_exit(qty=50, avg_price=10000, price=13200, env=self._env(), params=p, state=st)
+        assert d.exit and d.reason == "post_sell_gain" and d.qty == 50   # 13200 >= 12000*1.10
+
+    def test_post_sell_gain_not_reached_keeps_holding(self):
+        p = _params(post_sell_gain_pct=10)
+        st = PositionState("005930", partial_sold=True, peak_since_partial=13100, partial_sell_price=12000)
+        d = should_exit(qty=50, avg_price=10000, price=13100, env=self._env(), params=p, state=st)
+        assert not d.exit   # 13100 < 13200, 고점 대비 하락도 없음
+
+    def test_post_sell_gain_disabled_by_default(self):
+        st = PositionState("005930", partial_sold=True, peak_since_partial=20000, partial_sell_price=12000)
+        d = should_exit(qty=50, avg_price=10000, price=20000, env=self._env(), params=_params(), state=st)
+        assert not d.exit   # 기본 0 = 끔 → 고점 추적만
+
+    def test_post_sell_gain_does_not_apply_before_partial(self):
+        p = _params(post_sell_gain_pct=10)
+        d = should_exit(qty=100, avg_price=10000, price=10500, env=self._env(), params=p, state=PositionState("x"))
+        assert not d.exit   # 분할매도 전엔 X1 만
+
+    def test_limit_up_beats_post_sell_gain(self):
+        p = _params(post_sell_gain_pct=10)
+        st = PositionState("005930", partial_sold=True, peak_since_partial=13200, partial_sell_price=12000)
+        d = should_exit(qty=50, avg_price=10000, price=13200, env=self._env(), params=p, state=st, at_limit_up=True)
+        assert d.exit and d.reason == "limit_up"
+
+    def test_on_partial_sell_records_price(self):
+        st = PositionState("005930")
+        st.on_partial_sell(12000)
+        assert st.partial_sold and st.partial_sell_price == 12000 and st.peak_since_partial == 12000
+
 
 # ── 리스크 가드 ───────────────────────────────────────
 class TestRisk:

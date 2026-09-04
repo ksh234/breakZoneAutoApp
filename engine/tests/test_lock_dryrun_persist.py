@@ -162,7 +162,7 @@ def test_restore_state_rebuilds_states_and_lows():
     real = MagicMock()
     real.load_strategy_states.return_value = [
         {"code": "005930", "entries_done": 2, "invested_krw": 600000, "partial_sold": True,
-         "peak_since_partial": 12000, "zone_low": None},
+         "peak_since_partial": 12000, "partial_sell_price": 11500, "zone_low": None},
         {"code": "000660", "entries_done": 0, "invested_krw": 0, "partial_sold": False,
          "peak_since_partial": 0, "zone_low": 8800},
     ]
@@ -170,6 +170,7 @@ def test_restore_state_rebuilds_states_and_lows():
     assert e.restore_state() == 2
     st = e.states["005930"]
     assert st.entries_done == 2 and st.partial_sold and st.peak_since_partial == 12000
+    assert st.partial_sell_price == 11500
     assert "000660" not in e.states and e.candidate_lows == {"000660": 8800}
 
 
@@ -204,6 +205,7 @@ def test_peak_change_persists(_m):
     e._evaluate_exits(set())
     kw = real.save_strategy_state.call_args.kwargs
     assert kw["peak_since_partial"] == 12000 and kw["partial_sold"] is True
+    assert "partial_sell_price" in kw
 
 
 def test_candidate_low_change_persists_and_reset_deletes():

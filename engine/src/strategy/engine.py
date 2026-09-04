@@ -73,7 +73,8 @@ class StrategyEngine:
                     code, entries_done=int(r.get("entries_done") or 0),
                     invested_krw=int(r.get("invested_krw") or 0),
                     partial_sold=bool(r.get("partial_sold")),
-                    peak_since_partial=int(r.get("peak_since_partial") or 0))
+                    peak_since_partial=int(r.get("peak_since_partial") or 0),
+                    partial_sell_price=int(r.get("partial_sell_price") or 0))
             if r.get("zone_low"):
                 self.candidate_lows[code] = int(r["zone_low"])
         if rows:
@@ -94,6 +95,7 @@ class StrategyEngine:
                     invested_krw=st.invested_krw if st else 0,
                     partial_sold=st.partial_sold if st else False,
                     peak_since_partial=st.peak_since_partial if st else 0,
+                    partial_sell_price=st.partial_sell_price if st else 0,
                     zone_low=low)
         except Exception:
             logger.exception("strategy_state 저장 실패 %s", code)

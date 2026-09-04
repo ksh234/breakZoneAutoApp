@@ -107,9 +107,15 @@ def should_exit(
                                 note=f"+{pnl_pct:.1f}% & env상단 돌파")
         return ExitDecision(False, note="익절 조건 미충족")
 
-    # 분할매도 이후: 잔량 전량 청산 트리거
+    # 분할매도 이후: 잔량 전량 청산 트리거 (우선순위: 상한가 → 2차 상승 → 트레일링)
     if params.sell_all_on_limit_up and at_limit_up:
         return ExitDecision(True, qty, "limit_up", note="상한가 전량")
+    # X2b · 2차 상승 전량매도: 1차(분할) 매도가 대비 +post_sell_gain_pct% 도달 (0=끔)
+    if params.post_sell_gain_pct > 0 and state.partial_sell_price > 0:
+        target = round(state.partial_sell_price * (1 + params.post_sell_gain_pct / 100))  # 원 단위(부동소수 오차 방지)
+        if price >= target:
+            return ExitDecision(True, qty, "post_sell_gain",
+                                note=f"1차 매도가 {state.partial_sell_price} 대비 +{params.post_sell_gain_pct:g}% 도달")
     peak = state.peak_since_partial or price
     if price <= peak * (1 - params.post_sell_stop_pct):
         return ExitDecision(True, qty, "trailing_stop",

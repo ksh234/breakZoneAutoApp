@@ -25,6 +25,7 @@ class StrategyParams:
     take_profit_pct: float = 15.0
     first_sell_portion: float = 0.50
     post_sell_stop_pct: float = 0.05
+    post_sell_gain_pct: float = 0.0    # 분할매도 후 1차 매도가 대비 +이 % 이상이면 잔량 전량매도(0=끔). 2026-09-04
     sell_all_on_limit_up: bool = True
     limit_up_pct: float = 29.0     # 분할매도 후 전일종가 대비 +이 % 이상이면 전량매도(예 29≈상한가)
     # 리스크/운영

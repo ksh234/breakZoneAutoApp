@@ -74,6 +74,10 @@
 - `price ≤ peak_since_partial × (1 − post_sell_stop_pct)` (기본 **5%** 하락) → **잔량 전량매도**.
 - 기준 = 분할매도 후 **고점**(트레일링). 2026-09-02 확정.
 
+**X2b · 2차 상승 전량매도** — `partial_sold` 이후 (2026-09-04 사용자 추가):
+- 현재가 ≥ `partial_sell_price × (1 + post_sell_gain_pct/100)` → **잔량 전량매도**. 기준은 **1차(분할) 매도가**(평단 아님). `post_sell_gain_pct`=0 이면 끔(기본). 상한가(X3)와 별개로 목표 상승률에서 확정.
+- 분할매도 후 판정 우선순위: **X3 상한가 → X2b 2차 상승 → X2 트레일링.**
+
 **X3 · 급등 전량매도** — `partial_sold` 이후:
 - 현재가가 전일종가 대비 **+`limit_up_pct`%**(기본 29≈상한가, 조절 가능 예 28) 이상 → **잔량 전량매도**. `sell_all_on_limit_up`로 on/off.
 
@@ -83,7 +87,7 @@
 
 ### 2.2b 포지션 전략상태 (엔진 로컬 추적 — 브로커 잔고 외 추가)
 분할매수/매도 규칙에 필요한 종목별 상태:
-- `entries_done`(분할매수 횟수), `partial_sold`(첫 분할매도 여부), `peak_since_partial`(분할매도 후 고점).
+- `entries_done`(분할매수 횟수), `partial_sold`(첫 분할매도 여부), `peak_since_partial`(분할매도 후 고점), `partial_sell_price`(1차 매도가 — X2b 기준, 2026-09-04).
 - **영속화(2026-09-03 구현):** 봇 메모리 + Supabase `strategy_state`(owner, code) 테이블. 저장 시점 = 매수 체결 접수·분할매도·고점 갱신·**매수구간 저점(`zone_low`) 변경** 시(변경분만). 청산 완료(잔고에서 사라짐)·저점 리셋 시 행 삭제. 봇 시작(LIVE 전환) 시 `restore_state()` 로 복원 → 재배포/재시작해도 분할 횟수·고점·저점 유지. 복원 실패 시 빈 상태로 시작(기존 보유는 잔고 기준 1회 매수로 간주).
 
 ### 2.3 신호(signal) 매핑 — 앱 표시용
@@ -171,6 +175,7 @@ def tick():                              # 동기(D-011)
 | `first_sell_portion` | 첫 분할매도 비중 | 0.50 |
 | `post_sell_stop_pct` | 분할매도 후 하락 전량매도 기준 | 0.05 |
 | `post_sell_stop_ref` | 위 기준점 | peak (분할매도후 고점) |
+| `post_sell_gain_pct` | 분할매도 후 **1차 매도가 대비** 상승 전량매도 %(0=끔) | 0 |
 | `sell_all_on_limit_up` | 급등 전량매도 사용 on/off | true |
 | `limit_up_pct` | 급등 전량매도 기준(전일종가 대비 %) | 29 |
 | `max_unrealized_loss_krw` | 보유 평가손실 한도(이상이면 신규매수 중단) | 500,000 |
