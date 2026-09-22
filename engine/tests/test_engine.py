@@ -9,6 +9,7 @@ from src.broker.models import Balance, Order, OrderStatus, OrderType, Position, 
 from src.strategy.engine import StrategyEngine
 from src.strategy.indicators import Envelope
 from src.strategy.params import StrategyParams
+from src.strategy.state import PositionState
 
 KST = timezone(timedelta(hours=9))
 NOW = lambda: datetime(2026, 9, 2, 10, 0, tzinfo=KST)
@@ -173,3 +174,56 @@ def test_load_params_failure_keeps_previous():
     relay.load_settings.side_effect = RuntimeError("down")
     assert e.load_params(source="periodic") is False
     assert e.params.enabled is True
+
+
+# ── 2026-09-22: 첫 매수 직후 상태 유실 버그 / 추매 저점 반등 ──
+def test_state_survives_until_position_appears():
+    """매수 주문 후 잔고에 아직 없어도(미체결) 상태를 지우지 않고, 체결 후에도 분할횟수·누적액이 이어진다."""
+    clock = {"now": datetime(2026, 9, 22, 13, 45, tzinfo=KST)}
+    broker = _broker(price=4770, positions=[])
+    e = StrategyEngine(broker, MagicMock(), now=lambda: clock["now"])
+    e.status = "running"; e.params = StrategyParams(enabled=True)
+    e.candidates = {"005930": _cand(drop_ratio=35)}
+    e.envelopes = {"005930": Envelope(ma=10000, upper=11000, lower=9500)}
+    e.prev_close = {"005930": 5000}
+    with patch("src.strategy.engine.is_market_open", return_value=True):
+        e.tick()                                                   # 신규 매수
+        assert e.states["005930"].entries_done == 1
+        inv = e.states["005930"].invested_krw
+        # 다음 tick: 잔고엔 아직 없고 미체결 주문만 있음 → 상태 유지, 중복주문 없음
+        broker.get_unfilled_orders.return_value = [{"code": "005930", "unfilled_qty": 10}]
+        clock["now"] += timedelta(seconds=5)
+        e.tick()
+        assert e.states["005930"].entries_done == 1 and broker.place_order.call_count == 1
+        # 체결: 잔고에 나타남 → 브로커 기반 재구성(1회로 덮어쓰기) 하지 않고 기존 상태 유지
+        broker.get_unfilled_orders.return_value = []
+        broker.get_positions.return_value = [Position(code="005930", name="삼성전자", qty=62, avg_price=4770, current_price=4770)]
+        clock["now"] += timedelta(seconds=5)
+        e.tick()
+        assert e.states["005930"].entries_done == 1 and e.states["005930"].invested_krw == inv
+
+
+def test_state_dropped_after_grace_if_never_filled():
+    clock = {"now": datetime(2026, 9, 22, 13, 45, tzinfo=KST)}
+    e = StrategyEngine(_broker(positions=[]), MagicMock(), now=lambda: clock["now"])
+    e.states["005930"] = PositionState("005930", entries_done=1, invested_krw=100000)
+    e._buy_at["005930"] = clock["now"]
+    e.sync_positions(set())
+    assert "005930" in e.states                                   # 유예 내
+    clock["now"] += timedelta(seconds=601)
+    e.sync_positions(set())
+    assert "005930" not in e.states                               # 유예 지남 + 미체결 없음 → 정리
+
+
+def test_non_holding_candidate_does_not_leave_empty_state():
+    broker = _broker(price=9000, positions=[])
+    e = _engine(broker)
+    e.candidates = {"005930": _cand(drop_ratio=10)}               # 조건 미달 → 매수 없음
+    e.envelopes = {"005930": Envelope(ma=10000, upper=11000, lower=9500)}
+    with patch("src.strategy.engine.is_market_open", return_value=True):
+        e.tick()
+    assert "005930" not in e.states
+    # 외부 매수로 잔고에 나타나면 브로커 기반 복원이 동작해야 함
+    broker.get_positions.return_value = [Position(code="005930", name="삼성전자", qty=10, avg_price=9000, current_price=9000)]
+    e.sync_positions(set())
+    assert e.states["005930"].entries_done == 1 and e.states["005930"].invested_krw == 90000

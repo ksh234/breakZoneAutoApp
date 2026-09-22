@@ -67,24 +67,32 @@ def should_enter(
     if status != "ok":
         return _no_enter(f"값 미확정(status={status}) — 해제금액/하락비율 부정확")
 
+    # 저점 반등 확인(신규·추가매수 공통, 2026-09-22 추매에도 적용): 매수구간 저가 대비
+    # entry_rebound_pct 이상 상승해야 매수(급락 중 매수·연쇄 물타기 방지). 0=안 봄.
+    def _rebound_wait() -> Optional[str]:
+        if params.entry_rebound_pct > 0:
+            if not low_price or price < low_price * (1 + params.entry_rebound_pct):
+                return f"저점 반등 대기(저가 {low_price} 대비 +{params.entry_rebound_pct:.0%} 미달)"
+        return None
+
     if not holding:
         # E1 · 신규 진입
         if drop_ratio is None:
             return _no_enter("drop_ratio 없음")
         if drop_ratio < params.entry_drop_pct:
             return _no_enter(f"drop_ratio {drop_ratio} < 기준 {params.entry_drop_pct}")
-        # 저점 반등 확인: 매수구간 저가 대비 entry_rebound_pct 이상 상승해야 매수(급락 중 매수 방지)
-        if params.entry_rebound_pct > 0:
-            if not low_price or price < low_price * (1 + params.entry_rebound_pct):
-                return _no_enter(f"저점 반등 대기(저가 {low_price} 대비 +{params.entry_rebound_pct:.0%} 미달)")
+        if (w := _rebound_wait()):
+            return _no_enter(w)
         if not (price < env.lower):
             return _no_enter("현재가가 envelope 하단 위")
         if positions_cnt >= params.max_positions:
             return _no_enter("최대 보유종목수 도달")
         return EnterDecision(True, qty, "new", "신규진입")
 
-    # E2 · 추가매수(물타기): 평단 대비 add_on_drop_pct 하락
+    # E2 · 추가매수(물타기): 평단 대비 add_on_drop_pct 하락 + 저점 반등(entry_rebound_pct>0 이면)
     if avg_price and price <= avg_price * (1 - params.add_on_drop_pct):
+        if (w := _rebound_wait()):
+            return _no_enter("추가매수 " + w)
         return EnterDecision(True, qty, "add", f"평단대비 {params.add_on_drop_pct:.0%} 하락")
     return _no_enter("추가매수 조건 미충족")
 

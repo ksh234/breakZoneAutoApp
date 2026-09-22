@@ -59,7 +59,9 @@
 → **분할매수**: 1회 매수액 = `per_stock_krw × entry_split_pct`(기본 100만 × **30%** = 30만). **누적 매수액이 `per_stock_krw`(종목당 총액)를 넘지 않도록 상한**(2026-09-02 확정) — 30%씩 사되 합계가 총액 도달 시 중단(약 3~4회). `max_entries` 는 보조 상한.
 
 **E2 · 추가매수(물타기)** — 보유 중:
-- `price ≤ avg_price × (1 − add_on_drop_pct)` (평단 대비 **5~10%** 하락, 기본 7%) 이고 `entries_done < max_entries`
+- `price ≤ avg_price × (1 − add_on_drop_pct)` (**평단 대비** 하락, 기본 7%) 이고 `entries_done < max_entries`
+- **저점 반등(2026-09-22 추가):** `entry_rebound_pct`>0 이면 신규진입과 같은 반등 조건(매수구간 저점 대비 +N%)을 추매에도 적용. 급락 중 연쇄 물타기 방지.
+- ⚠️ 기준이 **평단**이라 추매할수록 기준선이 내려감 → 급락 시 연쇄 추매 가능(2026-09-22 첫 매매에서 15분 내 3회). 사용자 결정: 평단 기준 유지, 수치로 조절.
 - → 1회분(`per_stock_krw × entry_split_pct`) 추가매수. (사용자 수동 추가매수도 허용 — 자동 규칙과 별개로 앱에서)
 
 ### 2.2 청산(매도) 규칙 (`strategy/rules.py::should_exit`)

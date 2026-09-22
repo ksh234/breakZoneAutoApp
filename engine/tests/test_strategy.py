@@ -169,6 +169,26 @@ class TestShouldEnter:
                          positions_cnt=1, cash=1_000_000)
         assert not d.enter   # 9500 > 9300
 
+    def test_add_on_requires_rebound_when_set(self):
+        """추매도 저점 반등 조건 적용(2026-09-22): 평단 -7% 충족해도 저점 대비 +1% 미달이면 대기."""
+        p = _params(add_on_drop_pct=0.07, entry_rebound_pct=0.01)
+        st = PositionState("005930", entries_done=1, invested_krw=300_000)
+        kw = dict(drop_ratio=35, status="ok", env=self._env(), params=p, state=st,
+                  holding=True, avg_price=4770, positions_cnt=1, cash=10_000_000)
+        d = should_enter(price=4385, low_price=4385, **kw)          # 저점 갱신 중(반등 0%)
+        assert not d.enter and "반등 대기" in d.note
+        d = should_enter(price=4385, low_price=4340, **kw)          # 저점 4340 대비 +1.04%
+        assert d.enter and d.kind == "add"
+        d = should_enter(price=4385, low_price=None, **kw)          # 저점 미추적 → 대기
+        assert not d.enter
+
+    def test_add_on_no_rebound_check_when_zero(self):
+        p = _params(add_on_drop_pct=0.07, entry_rebound_pct=0.0)
+        st = PositionState("005930", entries_done=1, invested_krw=300_000)
+        d = should_enter(drop_ratio=35, status="ok", price=4385, env=self._env(), params=p, state=st,
+                         holding=True, avg_price=4770, positions_cnt=1, cash=10_000_000, low_price=None)
+        assert d.enter and d.kind == "add"
+
     def test_budget_exhausted(self):
         st = PositionState("005930", entries_done=3, invested_krw=1_000_000)
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),

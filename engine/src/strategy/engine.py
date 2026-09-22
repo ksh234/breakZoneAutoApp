@@ -25,6 +25,7 @@ from .state import PositionState
 
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
+BUY_GRACE_SEC = 600  # 매수 주문 후 이 시간 동안은 잔고에 안 보여도 전략상태를 지우지 않음(체결 지연·잔고 반영 지연)
 PARAMS_RELOAD_SEC = 30  # settings 주기 재로드(앱 set_param 명령 유실·대시보드 직접 수정 대비 안전망)
 
 
@@ -49,6 +50,7 @@ class StrategyEngine:
         self._real_relay = relay
         self.live = True                   # False=드라이런/관찰: 주문 금지 + Supabase 쓰기 무시(DryRunRelay)
         self._dry_logged: set[str] = set() # 드라이런 판정 로그 중복 방지(일 단위 리셋)
+        self._buy_at: dict[str, datetime] = {}  # 종목별 마지막 매수 주문 시각(상태 보호 유예용)
 
     # ── 라이브/드라이런 전환 ──────────────────────────
     def set_live(self, live: bool, reason: str = "") -> None:
@@ -210,15 +212,24 @@ class StrategyEngine:
         if self.status != "running" or not market:
             self._heartbeat(market)
             return
-        self.sync_positions()
+        pending = self._pending_codes()
+        self.sync_positions(pending)
         self._sync_candidate_display()
         self._update_candidate_lows()
-        pending = self._pending_codes()
         self._evaluate_exits(pending)
         self._evaluate_entries(pending)
         self._heartbeat(market)
 
-    def sync_positions(self) -> None:
+    def _state_protected(self, code: str, pending: set[str]) -> bool:
+        """잔고에 없어도 전략상태를 지우면 안 되는 경우: 매수 미체결 주문 있음 / 최근 BUY_GRACE_SEC 내 매수 주문.
+        (2026-09-22 버그: 첫 매수 직후 잔고 반영 전에 상태가 지워져 분할횟수·누적액이 0부터 다시 세어짐 → 예산 상한 무력화)"""
+        if code in pending:
+            return True
+        t = self._buy_at.get(code)
+        return bool(t and (self._now() - t).total_seconds() < BUY_GRACE_SEC)
+
+    def sync_positions(self, pending: set[str] | None = None) -> None:
+        pending = pending or set()
         try:
             positions = self.broker.get_positions()
         except BrokerError:
@@ -230,7 +241,10 @@ class StrategyEngine:
                 self.states[code] = PositionState(code, entries_done=1, invested_krw=p.avg_price * p.qty)
         for code in list(self.states):    # 청산 완료분 정리
             if code not in self.positions:
+                if self._state_protected(code, pending):
+                    continue
                 self.states.pop(code, None)
+                self._buy_at.pop(code, None)
                 try:
                     self.relay.remove_position(code)
                 except Exception:
@@ -332,7 +346,8 @@ class StrategyEngine:
                 continue
             pos = self.positions.get(code)
             holding = pos is not None and pos.qty > 0
-            st = self.states.setdefault(code, PositionState(code))
+            # 미보유 종목의 빈 상태를 states 에 넣지 않는다(넣으면 체결 후 sync_positions 의 잔고 기반 복원이 막힘)
+            st = self.states.get(code) or PositionState(code)
             release_passed = cand.release_date is not None and today > cand.release_date
             d = should_enter(
                 drop_ratio=cand.drop_ratio, status=cand.status, price=price,
@@ -377,6 +392,7 @@ class StrategyEngine:
             self._emit("error", "warn", "매수 실패", f"{cand.name}: {e}")
             return
         self.states.setdefault(cand.code, PositionState(cand.code)).on_buy(d.qty, price)
+        self._buy_at[cand.code] = self._now()
         self._persist_state(cand.code)
         self._record_order(order)
         self._emit("entry", "info", "매수 접수", f"{cand.name} {d.kind} {d.qty}주 @ {price:,}")
