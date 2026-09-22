@@ -89,11 +89,13 @@ def should_enter(
             return _no_enter("최대 보유종목수 도달")
         return EnterDecision(True, qty, "new", "신규진입")
 
-    # E2 · 추가매수(물타기): 평단 대비 add_on_drop_pct 하락 + 저점 반등(entry_rebound_pct>0 이면)
-    if avg_price and price <= avg_price * (1 - params.add_on_drop_pct):
+    # E2 · 추가매수(물타기): **직전 매수가** 대비 add_on_drop_pct 하락 (2026-09-22 평단→직전매수가)
+    #      + 저점 반등(entry_rebound_pct>0 이면). 직전 매수가 미기록(재시작·외부매수)이면 평단으로 대체.
+    ref = state.last_buy_price or avg_price
+    if ref and price <= ref * (1 - params.add_on_drop_pct):
         if (w := _rebound_wait()):
             return _no_enter("추가매수 " + w)
-        return EnterDecision(True, qty, "add", f"평단대비 {params.add_on_drop_pct:.0%} 하락")
+        return EnterDecision(True, qty, "add", f"직전매수가 {ref} 대비 {params.add_on_drop_pct:.0%} 하락")
     return _no_enter("추가매수 조건 미충족")
 
 

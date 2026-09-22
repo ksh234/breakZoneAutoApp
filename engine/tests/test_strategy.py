@@ -160,7 +160,23 @@ class TestShouldEnter:
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
                          params=p, state=st, holding=True, avg_price=10000,
                          positions_cnt=1, cash=1_000_000)
-        assert d.enter and d.kind == "add"   # 9000 <= 10000*0.93=9300
+        assert d.enter and d.kind == "add"   # last_buy 미기록 → 평단 폴백: 9000 <= 10000*0.93=9300
+
+    def test_add_on_uses_last_buy_price_not_avg(self):
+        """2026-09-22: 기준 = 직전 매수가. 더코디 사례 재현 — 평단 기준이면 3회 연쇄, 직전가 기준이면 2회."""
+        p = _params(add_on_drop_pct=0.07, per_stock_krw=12_000_000, max_entries=4)
+        st = PositionState("005930", entries_done=1, invested_krw=2_995_560, last_buy_price=4770)
+        kw = dict(drop_ratio=35, status="ok", env=self._env(), params=p, state=st, holding=True,
+                  positions_cnt=1, cash=10_000_000)
+        assert should_enter(price=4385, avg_price=4770, **kw).enter          # 4385 <= 4770*0.93=4436
+        st.on_buy(684, 4385)                                                  # last_buy=4385 → 다음 기준 4078
+        assert not should_enter(price=4100, avg_price=4569, **kw).enter      # 평단 기준이면 4249 이하라 통과했을 것
+        assert should_enter(price=4075, avg_price=4569, **kw).enter          # 4075 <= 4078
+
+    def test_on_buy_records_last_buy_price(self):
+        st = PositionState("x")
+        st.on_buy(10, 5000); assert st.last_buy_price == 5000
+        st.on_buy(10, 4600); assert st.last_buy_price == 4600
 
     def test_add_reject_small_dip(self):
         st = PositionState("005930", entries_done=1, invested_krw=300_000)

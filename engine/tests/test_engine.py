@@ -227,3 +227,4 @@ def test_non_holding_candidate_does_not_leave_empty_state():
     broker.get_positions.return_value = [Position(code="005930", name="삼성전자", qty=10, avg_price=9000, current_price=9000)]
     e.sync_positions(set())
     assert e.states["005930"].entries_done == 1 and e.states["005930"].invested_krw == 90000
+    assert e.states["005930"].last_buy_price == 9000                     # 외부매수 복원 시 직전가=평단

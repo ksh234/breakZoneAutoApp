@@ -16,7 +16,7 @@ const _specs = <(String, String, String, bool, num)>[
   ('매수 설정', 'per_stock_krw', '종목당 총 투자액(원)', true, 1000000),
   ('매수 설정', 'entry_split_pct', '1회 매수 비중 (0~1, 0.3=30%)', false, 0.30),
   ('매수 설정', 'max_entries', '최대 분할매수 횟수', true, 4),
-  ('매수 설정', 'add_on_drop_pct', '추가매수 하락 기준 — 평단가 대비 (0~1, 0.07=평단 −7%). 추매마다 평단이 내려가므로 급락 시 연쇄 추매 가능', false, 0.07),
+  ('매수 설정', 'add_on_drop_pct', '추가매수 하락 기준 — 직전 매수가 대비 (0~1, 0.07=직전 매수가 −7%)', false, 0.07),
   // 매도 설정
   ('매도 설정', 'take_profit_pct', '분할익절 수익률(%)', false, 15),
   ('매도 설정', 'first_sell_portion', '첫 분할매도 비중 (0~1, 0.5=50%)', false, 0.50),

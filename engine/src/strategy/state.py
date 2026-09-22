@@ -12,10 +12,12 @@ class PositionState:
     partial_sold: bool = False   # 첫 분할매도(익절) 실행 여부
     peak_since_partial: int = 0  # 분할매도 이후 고점(트레일링 기준)
     partial_sell_price: int = 0  # 1차(분할) 매도 가격 — 2차 상승 전량매도 기준(post_sell_gain_pct)
+    last_buy_price: int = 0      # 직전 매수가 — 추가매수(물타기) 기준(add_on_drop_pct). 2026-09-22
 
     def on_buy(self, qty: int, price: int) -> None:
         self.entries_done += 1
         self.invested_krw += qty * price
+        self.last_buy_price = price
 
     def on_partial_sell(self, price: int) -> None:
         self.partial_sold = True

@@ -205,7 +205,7 @@ def test_peak_change_persists(_m):
     e._evaluate_exits(set())
     kw = real.save_strategy_state.call_args.kwargs
     assert kw["peak_since_partial"] == 12000 and kw["partial_sold"] is True
-    assert "partial_sell_price" in kw
+    assert "partial_sell_price" in kw and "last_buy_price" in kw
 
 
 def test_candidate_low_change_persists_and_reset_deletes():

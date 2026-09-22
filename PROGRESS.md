@@ -13,7 +13,7 @@
 |---|---|
 | **마지막 업데이트** | 2026-09-22 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
-| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **177개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
+| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **179개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
 | **다음 마일스톤** | ① 집 PC 에서 **단계 B 첫 모의매매 관찰**(장중, 새 코드) ② **클라우드 VM 생성(사용자 보류 중)** → 서버 설치·전환 → Phase 6 장기 검증 |
 | **블로커** | VM 생성 보류(사용자 "나중에"). Oracle 무료티어는 가입 시 한국 리전 미제공 상태였음(2026-09-03). 대안: 며칠 뒤 Oracle 재시도 / AWS Lightsail 서울(월 $5) / Azure 무료 12개월. |
 
@@ -50,7 +50,7 @@
 ```powershell
 # 봇
 cd D:\myWorkspace\breakZoneAutoApp\engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 177개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 179개
 .\.venv\Scripts\python.exe -m src.main                      # 봇 실행(장중)
 # 앱
 cd D:\myWorkspace\breakZoneAutoApp\app
@@ -93,7 +93,7 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 - **분석 ① 연쇄 추매는 규칙대로:** 물타기 기준이 **평단 대비** -7% 라 추매마다 기준선이 내려감 → 15분 -14.6% 급락에 3회 모두 충족(4,436/4,249/4,093 기준선). 추매엔 저점 반등 조건이 없었음.
 - **분석 ② 버그 — 첫 매수 상태 유실로 예산 상한 무력화:** DB `strategy_state` 가 entries 3 / 8,995,640(= 2·3·4번째 합) → 첫 매수 누락. 원인: 매수 직후 tick 에서 잔고에 아직 없음 → `sync_positions` 가 청산으로 간주해 상태 삭제 → `_evaluate_*` 의 `setdefault` 가 빈 상태를 넣어 체결 후 잔고 기반 복원(entries=1)도 차단 → 0부터 재계수. 결과: 4번째 추매가 잔여예산 ~100만 대신 300만 집행(총 1,199만 > 상한 1,000만), 5번째 추매 가능 상태.
 - **수정(사용자 승인):** ① `BUY_GRACE_SEC=600` — 매수 주문 후 10분간 또는 미체결 주문 있으면 잔고에 없어도 상태 유지(`_state_protected`, tick 이 pending 을 먼저 조회해 `sync_positions(pending)` 전달) ② 미보유 종목은 states 에 빈 상태를 넣지 않음(`states.get(code) or PositionState`) ③ **추매에도 저점 반등 조건 적용**(`_rebound_wait` 공통, 사용자 결정) ④ 앱 라벨: 추가매수 기준에 "평단가 대비·연쇄 추매 가능", 반등 조건에 "신규·추매 공통" 명시 → APK 재빌드 ⑤ DB 224060 상태를 실제값(4회, 11,991,200)으로 수기 보정. 테스트 +5 → **177개**. docs/03·사용법 §4·§11·DECISIONS(D-013 보강) 갱신.
-- **사용자 결정:** 추매 기준은 평단가 유지(직전 매수가·추매 간격 제한 미채택), 수치는 앱에서 조절.
+- **사용자 결정(번복):** 추매 기준 평단가 → **직전 매수가 대비**로 변경. `last_buy_price` 상태 추가·영속화(마이그레이션 **0007** CLI 적용), 규칙 `ref = last_buy_price or avg_price`. 재시작/외부매수 복원 시 직전가=평단. 더코디 DB `last_buy_price`=4,075 수기 입력. 앱 라벨 "직전 매수가 대비" → APK 재빌드. 테스트 +2 → **179개**.
 - ⚠️ 수정 시점에 구코드 봇이 실행 중(13:21 시작, 메모리 상태 entries=3) → **재시작 필요**. 재시작 전 DB 값이 구봇에 의해 덮일 수 있어 재시작 후 `strategy_state` 224060 = 4회/11,991,200 재확인할 것.
 
 ### 세션 2026-09-04 오전 (첫 장중 실행 로그 분석 → Supabase 통신 안정화)
