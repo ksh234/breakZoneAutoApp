@@ -20,6 +20,7 @@
 | 토큰 응답 필드 | `token`, `token_type`, `expires_dt`(yyyyMMddHHmmss), `return_code`, `return_msg` | | ✅ |
 | 토큰 만료 | `expires_dt` 값으로 확인 (스모크 테스트 실행 시 실측) | | ⬜ |
 | 데이터 요청 공통 | `POST`, 헤더 `authorization: Bearer <token>` + `api-id: <TR>` + `Content-Type: application/json;charset=UTF-8`. (데이터 요청엔 appkey 헤더 불필요, 토큰만). 연속조회는 응답 헤더 `cont-yn`/`next-key` | | ✅ |
+| 예수금상세 TR | `kt00001` (예수금상세현황요청), path `/api/dostk/acnt`, body `{"qry_tp":"3"}`(추정조회). 응답 `entr`(예수금)·`ord_alow_amt`(주문가능금액)·`pymn_alow_amt`(출금가능). 2026-09-23 실측 | | ✅ |
 | 잔고조회 TR | `kt00018` (계좌평가잔고내역요청), path `/api/dostk/acnt`, body `{"qry_tp":"1"(합산)/"2"(개별),"dmst_stex_tp":"KRX"}`. 응답 합계 `prsm_dpst_aset_amt`(추정예탁자산)·`tot_evlt_amt`(총평가금액)·`tot_pur_amt`·`tot_evlt_pl`. 보유목록 `acnt_evlt_remn_indv_tot[]`: `stk_cd,stk_nm,rmnd_qty,pur_pric,cur_prc,evltv_prft` | | ✅ |
 | 현재가 조회 TR | `ka10001` (주식기본정보요청), path `/api/dostk/stkinfo`, body `{"stk_cd"}`. 응답 현재가 `cur_prc` (부호 접두 가능 예 `"+57800"` → 절대값 파싱) | | ✅ |
 | 호가 조회 TR | `ka10004` (주식호가요청), path `/api/dostk/mrkcond`, body `{"stk_cd"}` | | ✅ |

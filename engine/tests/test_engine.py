@@ -228,3 +228,14 @@ def test_non_holding_candidate_does_not_leave_empty_state():
     e.sync_positions(set())
     assert e.states["005930"].entries_done == 1 and e.states["005930"].invested_krw == 90000
     assert e.states["005930"].last_buy_price == 9000                     # 외부매수 복원 시 직전가=평단
+
+
+def test_heartbeat_pushes_balance_fields():
+    broker = _broker()
+    broker.get_balance.return_value = Balance(cash=37_987_660, equity=49_982_188, stock_value=12_060_860,
+                                              deposit=50_000_000, unrealized_pnl=-17_812)
+    e = _engine(broker)
+    e._heartbeat(True)
+    kw = e.relay.push_bot_state.call_args.kwargs
+    assert kw["equity"] == 49_982_188 and kw["cash"] == 37_987_660
+    assert kw["stock_value"] == 12_060_860 and kw["deposit"] == 50_000_000 and kw["unrealized_pnl"] == -17_812

@@ -294,12 +294,22 @@ class KiwoomRestBroker(BrokerAdapter):
         return out
 
     def get_balance(self) -> Balance:
+        """잔고 = kt00018(총자산·주식평가·평가손익) + kt00001(예수금·주문가능금액). 영웅문과 동일 정의(2026-09-23)."""
         data, _ = self._post("/api/dostk/acnt", "kt00018", {"qry_tp": "1", "dmst_stex_tp": "KRX"})
         equity = to_int(data.get("prsm_dpst_aset_amt"))       # 추정예탁자산(총자산)
         stock_value = to_int(data.get("tot_evlt_amt"))         # 총평가금액(주식)
-        cash = max(0, equity - stock_value)                    # 주문가능현금 근사(실측 후 정밀화)
+        unrealized = to_int(data.get("tot_evlt_pl"), signed=True)  # 총평가손익
+        deposit, cash = 0, 0
+        try:
+            d2, _ = self._post("/api/dostk/acnt", "kt00001", {"qry_tp": "3"})  # 예수금상세(추정조회)
+            deposit = to_int(d2.get("entr"))                   # 예수금
+            cash = to_int(d2.get("ord_alow_amt"))              # 주문가능금액(수수료·세금 예정분 차감)
+        except Exception:
+            logger.warning("예수금상세(kt00001) 조회 실패 — 주문가능금액을 총자산-주식평가로 근사", exc_info=True)
+        if not cash:
+            cash = max(0, equity - stock_value)
         return Balance(cash=cash, equity=equity or stock_value, stock_value=stock_value,
-                       updated_at=datetime.now(KST))
+                       deposit=deposit, unrealized_pnl=unrealized, updated_at=datetime.now(KST))
 
     # ── 실시간 시세 (WebSocket, 스레드) ───────────────
     def subscribe_realtime(self, codes: list[str], on_tick: Callable[[str, int], None]) -> None:

@@ -119,13 +119,27 @@ class TestOrders:
 # ── 계좌/시세 ─────────────────────────────────────────
 class TestAccount:
     def test_get_balance(self):
+        """kt00018(총자산·주식평가·평가손익) + kt00001(예수금·주문가능금액) — 영웅문 정의(2026-09-23)."""
         b = _broker()
-        b._session.post.return_value = _resp({
-            "return_code": 0, "prsm_dpst_aset_amt": "10,000,000", "tot_evlt_amt": "3,000,000"})
+        b._session.post.side_effect = [
+            _resp({"return_code": 0, "prsm_dpst_aset_amt": "000000049982188", "tot_evlt_amt": "000000012060860",
+                   "tot_evlt_pl": "-00000000017812"}),
+            _resp({"return_code": 0, "entr": "000000050000000", "ord_alow_amt": "000000037987660"}),
+        ]
         bal = b.get_balance()
-        assert bal.equity == 10_000_000
-        assert bal.stock_value == 3_000_000
-        assert bal.cash == 7_000_000
+        assert bal.equity == 49_982_188 and bal.stock_value == 12_060_860
+        assert bal.unrealized_pnl == -17_812
+        assert bal.deposit == 50_000_000 and bal.cash == 37_987_660   # 근사(37,921,328)가 아닌 키움 값
+        assert b._session.post.call_count == 2
+
+    def test_get_balance_falls_back_when_deposit_query_fails(self):
+        b = _broker()
+        b._session.post.side_effect = [
+            _resp({"return_code": 0, "prsm_dpst_aset_amt": "10,000,000", "tot_evlt_amt": "3,000,000"}),
+            _resp({"return_code": 3, "return_msg": "err"}),
+        ]
+        bal = b.get_balance()
+        assert bal.cash == 7_000_000 and bal.deposit == 0
 
     def test_get_positions_filters_and_maps(self):
         b = _broker()

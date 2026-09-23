@@ -54,9 +54,10 @@ create table bot_state (
   status        text not null default 'stopped'
                 check (status in ('stopped','running','paused','stopping','error')),
   market_open   boolean default false,
-  equity        bigint,           -- 총평가금
-  cash          bigint,           -- 주문가능현금
-  day_pnl       bigint,           -- 당일 손익
+  equity        bigint,           -- 총자산(추정예탁자산 kt00018 prsm_dpst_aset_amt)
+  cash          bigint,           -- 주문가능금액(kt00001 ord_alow_amt)
+  day_pnl       bigint,           -- 당일 실현손익(봇 집계)
+  -- 0008(2026-09-23): stock_value 주식평가금 · deposit 예수금 · unrealized_pnl 총평가손익
   positions_cnt int default 0,
   message       text,             -- 최근 상태/오류 메시지
   heartbeat_at  timestamptz not null default now(),

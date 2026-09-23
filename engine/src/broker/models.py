@@ -66,7 +66,9 @@ class Position:
 
 @dataclass
 class Balance:
-    cash: int          # 주문가능현금(추정예탁자산 기준)
-    equity: int        # 총평가금(현금+주식평가)
-    stock_value: int   # 주식평가금
+    cash: int          # 주문가능금액 (키움 kt00001 ord_alow_amt. 조회 실패 시 총자산-주식평가 근사)
+    equity: int        # 총자산 = 추정예탁자산 (kt00018 prsm_dpst_aset_amt)
+    stock_value: int   # 주식평가금 (kt00018 tot_evlt_amt)
+    deposit: int = 0   # 예수금 (kt00001 entr)
+    unrealized_pnl: int = 0  # 총평가손익 (kt00018 tot_evlt_pl, 부호 포함)
     updated_at: Optional[datetime] = None

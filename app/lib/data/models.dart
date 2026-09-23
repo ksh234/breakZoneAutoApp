@@ -8,11 +8,13 @@ class BotState {
   final String status;
   final bool marketOpen;
   final int equity, cash, dayPnl, positionsCnt;
+  final int stockValue, deposit, unrealizedPnl;   // 2026-09-23: 주식평가금·예수금·평가손익
   final String message;
   final DateTime? heartbeatAt;
   BotState({required this.status, required this.marketOpen, required this.equity,
     required this.cash, required this.dayPnl, required this.positionsCnt,
-    required this.message, this.heartbeatAt});
+    required this.message, this.heartbeatAt,
+    this.stockValue = 0, this.deposit = 0, this.unrealizedPnl = 0});
 
   factory BotState.fromMap(Map<String, dynamic> m) => BotState(
     status: _s(m['status']).isEmpty ? 'unknown' : _s(m['status']),
@@ -20,6 +22,7 @@ class BotState {
     equity: _i(m['equity']), cash: _i(m['cash']), dayPnl: _i(m['day_pnl']),
     positionsCnt: _i(m['positions_cnt']), message: _s(m['message']),
     heartbeatAt: DateTime.tryParse(_s(m['heartbeat_at']))?.toLocal(),
+    stockValue: _i(m['stock_value']), deposit: _i(m['deposit']), unrealizedPnl: _i(m['unrealized_pnl']),
   );
 }
 

@@ -487,7 +487,8 @@ class StrategyEngine:
                   "day_pnl": self.day_realized_pnl, "positions_cnt": len(self.positions)}
         try:
             bal = self.broker.get_balance()
-            fields.update(equity=bal.equity, cash=bal.cash)
+            fields.update(equity=bal.equity, cash=bal.cash, stock_value=bal.stock_value,
+                          deposit=bal.deposit, unrealized_pnl=bal.unrealized_pnl)
         except Exception:
             pass
         try:

@@ -59,7 +59,7 @@ def main() -> int:
     print("[2] 잔고 조회…")
     try:
         bal = broker.get_balance()
-        print(f"    추정예탁자산(equity)={bal.equity:,}  주식평가={bal.stock_value:,}  주문가능현금(근사)={bal.cash:,}")
+        print(f"    총자산={bal.equity:,}  주식평가={bal.stock_value:,}  예수금={bal.deposit:,}  주문가능={bal.cash:,}  평가손익={bal.unrealized_pnl:,}")
     except BrokerError as e:
         print(f"    [실패] {e}")
 
