@@ -38,8 +38,15 @@ class DashboardScreen extends ConsumerWidget {
           Row(children: [
             _MiniStat('보유 종목', positions.maybeWhen(
                 data: (p) => '${p.length}', orElse: () => '-')),
+            // 주문 스트림은 최근 50건(날짜 무관) → 오늘(로컬 날짜) 생성분만 센다. (2026-09-23 버그 수정)
             _MiniStat('오늘 주문', orders.maybeWhen(
-                data: (o) => '${o.length}', orElse: () => '-')),
+                data: (o) {
+                  final now = DateTime.now();
+                  return '${o.where((x) => x.createdAt != null
+                      && x.createdAt!.year == now.year
+                      && x.createdAt!.month == now.month
+                      && x.createdAt!.day == now.day).length}';
+                }, orElse: () => '-')),
           ]),
         ],
       ),
