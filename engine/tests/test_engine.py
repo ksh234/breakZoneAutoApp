@@ -252,3 +252,65 @@ def test_recompute_indicators_uses_closes_through_yesterday():
     assert end == date(2026, 9, 1) and start < end          # NOW=9/2 → end=9/1
     assert e.prev_close["224060"] == 4395
     assert e._at_limit_up("224060", 5710)                   # 4395*1.29=5669.6 ≤ 5710
+
+
+# ── 2026-09-28: 체결 동기화 ──
+def _sell_engine():
+    pos = Position(code="224060", name="더코디", qty=2779, avg_price=4307, current_price=5710)
+    broker = _broker(price=5710, positions=[pos], cash=0)
+    broker.place_order.return_value = Order(code="224060", name="더코디", side=Side.SELL, qty=2779,
+                                            order_type=OrderType.LIMIT, price=5710,
+                                            status=OrderStatus.SUBMITTED, broker_order_id="0088098")
+    e = _engine(broker)
+    e.relay.insert_order.return_value = "db-1"
+    e.candidates = {}; e.prev_close = {"224060": 4395}     # 5710 ≥ 4395*1.29 → 상한가 전량
+    return e, broker
+
+
+@patch("src.strategy.engine.is_market_open", return_value=True)
+def test_partial_fill_updates_order_and_realized_only_for_filled(_m):
+    e, broker = _sell_engine()
+    e.tick()                                                   # 매도 주문 → 추적 시작
+    assert "0088098" in e._open_orders and e.day_realized_pnl == 0   # 접수 시점엔 실현 0
+    broker.get_unfilled_orders.return_value = [{"ord_no": "0088098", "code": "224060", "unfilled_qty": 2263}]
+    e.tick()                                                   # 516 체결
+    kw = e.relay.update_order.call_args.kwargs
+    assert e.relay.update_order.call_args.args[0] == "db-1"
+    assert kw["filled_qty"] == 516 and kw["status"] == "partial" and "filled_at" not in kw
+    assert e.day_realized_pnl == (5710 - 4307) * 516
+    assert broker.place_order.call_count == 1                  # 미체결 중 중복 매도 없음
+    e.tick()                                                   # 변화 없음 → 추가 갱신 없음
+    assert e.relay.update_order.call_count == 1
+
+
+@patch("src.strategy.engine.is_market_open", return_value=True)
+def test_full_fill_marks_filled_and_emits_event(_m):
+    e, broker = _sell_engine()
+    e.tick()
+    broker.get_unfilled_orders.return_value = []               # 미체결 목록에서 사라짐 = 전량체결
+    e.tick()
+    kw = e.relay.update_order.call_args.kwargs
+    assert kw["filled_qty"] == 2779 and kw["status"] == "filled" and "filled_at" in kw
+    assert "0088098" not in e._open_orders
+    assert e.day_realized_pnl == (5710 - 4307) * 2779
+    assert broker.place_order.call_count == 1      # 잔고에 아직 남아 보여도 체결 직후 재매도 없음(FILL_GRACE)
+    titles = [c.kwargs["title"] for c in e.relay.insert_event.call_args_list]
+    assert "매도 체결 완료" in titles
+
+
+def test_daily_reset_expires_open_orders():
+    e = _engine(_broker())
+    e._day = datetime(2026, 9, 28, tzinfo=KST).date()
+    e._open_orders["x"] = {"db_id": "db-9", "code": "c", "name": "n", "side": "sell", "qty": 100,
+                           "price": 1000, "avg_price": 900, "filled": 30, "reason": "limit_up"}
+    e._maybe_daily_reset(datetime(2026, 9, 29, 9, 0, tzinfo=KST))
+    kw = e.relay.update_order.call_args.kwargs
+    assert kw["status"] == "canceled" and kw["filled_qty"] == 30 and e._open_orders == {}
+
+
+def test_dry_run_does_not_track_orders():
+    e, broker = _sell_engine()
+    e.set_live(False, "t")
+    with patch("src.strategy.engine.is_market_open", return_value=True):
+        e.tick()
+    assert e._open_orders == {}

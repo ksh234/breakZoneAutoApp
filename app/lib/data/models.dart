@@ -58,18 +58,24 @@ class Position {
 
 class OrderRow {
   final String id, code, name, side, orderType, status, reason;
-  final int qty, price;
+  final int qty, price, filledQty;   // filledQty: 체결수량(봇이 미체결 조회로 갱신, 2026-09-28)
   final DateTime? createdAt;
   OrderRow({required this.id, required this.code, required this.name,
     required this.side, required this.orderType, required this.status,
-    required this.reason, required this.qty, required this.price, this.createdAt});
+    required this.reason, required this.qty, required this.price, this.createdAt,
+    this.filledQty = 0});
   factory OrderRow.fromMap(Map<String, dynamic> m) => OrderRow(
     id: _s(m['id']), code: _s(m['code']), name: _s(m['name']), side: _s(m['side']),
     orderType: _s(m['order_type']), status: _s(m['status']), reason: _s(m['reason']),
-    qty: _i(m['qty']), price: _i(m['price']),
+    qty: _i(m['qty']), price: _i(m['price']), filledQty: _i(m['filled_qty']),
     createdAt: DateTime.tryParse(_s(m['created_at']))?.toLocal(),
   );
 }
+
+String orderStatusKr(String s) => switch (s) {
+  'submitted' => '접수', 'partial' => '부분체결', 'filled' => '체결완료',
+  'canceled' => '취소/만료', 'rejected' => '거부', 'pending' => '대기', _ => s,
+};
 
 class EventRow {
   final String id, type, severity, title, message;

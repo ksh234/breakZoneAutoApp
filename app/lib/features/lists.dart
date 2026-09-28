@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../data/models.dart';
 import '../data/repos.dart';
 
 final _won = NumberFormat('#,###');
@@ -117,7 +118,9 @@ class OrdersView extends ConsumerWidget {
           leading: Icon(buy ? Icons.arrow_downward : Icons.arrow_upward,
               color: buy ? Colors.red : Colors.blue),
           title: Text('${o.name} · ${buy ? '매수' : '매도'} ${o.qty}주'),
-          subtitle: Text('${_won.format(o.price)}원 · ${o.status} · ${o.reason}'),
+          subtitle: Text('${_won.format(o.price)}원 · ${orderStatusKr(o.status)}'
+              '${o.status == 'partial' || o.status == 'canceled' ? ' ${o.filledQty}/${o.qty}주' : ''}'
+              ' · ${o.reason}'),
           trailing: Text(o.createdAt == null ? '' : _hm.format(o.createdAt!),
               style: const TextStyle(fontSize: 11, color: Colors.grey)),
         );

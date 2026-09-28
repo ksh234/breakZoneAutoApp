@@ -26,6 +26,7 @@ from .state import PositionState
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
 BUY_GRACE_SEC = 600  # 매수 주문 후 이 시간 동안은 잔고에 안 보여도 전략상태를 지우지 않음(체결 지연·잔고 반영 지연)
+FILL_GRACE_SEC = 30  # 매도 전량체결 직후 잔고 반영 지연 동안 같은 종목 재매도 금지(중복 매도 방지)
 PARAMS_RELOAD_SEC = 30  # settings 주기 재로드(앱 set_param 명령 유실·대시보드 직접 수정 대비 안전망)
 
 
@@ -51,6 +52,10 @@ class StrategyEngine:
         self.live = True                   # False=드라이런/관찰: 주문 금지 + Supabase 쓰기 무시(DryRunRelay)
         self._dry_logged: set[str] = set() # 드라이런 판정 로그 중복 방지(일 단위 리셋)
         self._buy_at: dict[str, datetime] = {}  # 종목별 마지막 매수 주문 시각(상태 보호 유예용)
+        # 체결 추적(2026-09-28): broker_order_id → {db_id, code, name, side, qty, price, avg_price, filled, reason}
+        # 매 tick 미체결 조회로 체결수량을 갱신해 orders 테이블·실현손익에 반영. 재시작 시 추적 소실(문서화).
+        self._open_orders: dict[str, dict] = {}
+        self._sell_done_at: dict[str, datetime] = {}  # 종목별 매도 전량체결 시각(FILL_GRACE_SEC 재매도 금지)
 
     # ── 라이브/드라이런 전환 ──────────────────────────
     def set_live(self, live: bool, reason: str = "") -> None:
@@ -216,7 +221,9 @@ class StrategyEngine:
         if self.status != "running" or not market:
             self._heartbeat(market)
             return
-        pending = self._pending_codes()
+        unfilled = self._unfilled_orders()
+        pending = {u["code"] for u in unfilled}
+        self._sync_fills(unfilled)
         self.sync_positions(pending)
         self._sync_candidate_display()
         self._update_candidate_lows()
@@ -294,14 +301,62 @@ class StrategyEngine:
             if self.candidate_lows.get(code) != prev:
                 self._persist_state(code)
 
-    def _pending_codes(self) -> set[str]:
+    def _unfilled_orders(self) -> list[dict]:
         try:
-            return {u["code"] for u in self.broker.get_unfilled_orders()}
+            return self.broker.get_unfilled_orders()
         except Exception:
-            return set()
+            return []
+
+    def _pending_codes(self) -> set[str]:
+        return {u["code"] for u in self._unfilled_orders()}
+
+    # ── 체결 동기화 ───────────────────────────────────
+    def _sync_fills(self, unfilled: list[dict]) -> None:
+        """추적 중인 주문의 체결수량을 미체결 조회로 갱신 → orders 갱신 + 매도 실현손익(체결분만) 반영.
+        미체결 목록에 없으면 전량체결로 간주(당일 만료 취소는 _maybe_daily_reset 에서 처리)."""
+        if not self._open_orders:
+            return
+        left = {u.get("ord_no"): u.get("unfilled_qty", 0) for u in unfilled}
+        for ord_no, o in list(self._open_orders.items()):
+            filled = o["qty"] - left.get(ord_no, 0)
+            delta = filled - o["filled"]
+            if delta <= 0:
+                continue
+            o["filled"] = filled
+            done = filled >= o["qty"]
+            if o["side"] == "sell" and o["avg_price"]:
+                self.day_realized_pnl += (o["price"] - o["avg_price"]) * delta
+            try:
+                self.relay.update_order(o["db_id"], filled_qty=filled, filled_price=o["price"],
+                                        status="filled" if done else "partial",
+                                        **({"filled_at": self._now().isoformat()} if done else {}))
+            except Exception:
+                logger.exception("order 체결 갱신 실패 %s", ord_no)
+            if done:
+                self._open_orders.pop(ord_no, None)
+                if o["side"] == "sell":
+                    self._sell_done_at[o["code"]] = self._now()
+                side = "매도" if o["side"] == "sell" else "매수"
+                extra = (f" (실현 {(o['price'] - o['avg_price']) * o['qty']:,})"
+                         if o["side"] == "sell" and o["avg_price"] else "")
+                self._emit("fill", "info", f"{side} 체결 완료", f"{o['name']} {o['qty']}주 @ {o['price']:,}{extra}")
+            else:
+                logger.info("부분체결 %s %s %d/%d", o["name"], o["side"], filled, o["qty"])
+
+    def _expire_open_orders(self) -> None:
+        """날짜가 바뀌면 남은 추적 주문은 당일 만료(취소)로 마감."""
+        for ord_no, o in list(self._open_orders.items()):
+            try:
+                self.relay.update_order(o["db_id"], status="canceled", filled_qty=o["filled"])
+            except Exception:
+                logger.exception("order 만료 처리 실패 %s", ord_no)
+        self._open_orders.clear()
 
     def _evaluate_exits(self, pending: set[str]) -> None:
         for code, pos in list(self.positions.items()):
+            t = self._sell_done_at.get(code)
+            if t and (self._now() - t).total_seconds() < FILL_GRACE_SEC:
+                continue   # 전량체결 직후 잔고 반영 대기 — 중복 매도 방지
             price = self._price(code)
             if not price:
                 continue
@@ -417,11 +472,10 @@ class StrategyEngine:
         if d.mark_partial_sold:
             st.on_partial_sell(price)
             self._persist_state(pos.code)
-        realized = (price - pos.avg_price) * d.qty
-        self.day_realized_pnl += realized
-        self._record_order(order)
+        expected = (price - pos.avg_price) * d.qty   # 실현손익은 체결분만 _sync_fills 에서 반영
+        self._record_order(order, avg_price=pos.avg_price)
         self._emit("exit", "info", "매도 접수",
-                   f"{pos.name} {d.reason} {d.qty}주 @ {price:,} (실현 {realized:,})")
+                   f"{pos.name} {d.reason} {d.qty}주 @ {price:,} (전량 체결 시 실현 {expected:,})")
 
     def kill(self) -> None:
         if not self.live:
@@ -437,7 +491,7 @@ class StrategyEngine:
             try:
                 order = self.broker.place_order(pos.code, Side.SELL, pos.qty, OrderType.MARKET,
                                                 name=pos.name, reason="kill")
-                self._record_order(order)
+                self._record_order(order, avg_price=pos.avg_price)
             except BrokerError as e:
                 self._emit("error", "critical", "청산 실패", f"{pos.name}: {e} — 수동 개입 필요")
         self.status = "stopped"
@@ -452,7 +506,7 @@ class StrategyEngine:
         try:
             order = self.broker.place_order(code, Side.SELL, pos.qty, OrderType.MARKET,
                                             name=pos.name, reason="manual")
-            self._record_order(order)
+            self._record_order(order, avg_price=pos.avg_price)
         except BrokerError as e:
             return f"청산 실패: {e}"
         self._emit("exit", "info", "수동 청산", f"{pos.name} 전량 청산 주문")
@@ -474,15 +528,24 @@ class StrategyEngine:
     def _maybe_daily_reset(self, now: datetime) -> None:
         d = now.date()
         if self._day != d:
+            if self._day is not None:
+                self._expire_open_orders()
             self._day = d
             self.day_realized_pnl = 0
             self._dry_logged.clear()
 
-    def _record_order(self, order) -> None:
+    def _record_order(self, order, avg_price: int | None = None) -> None:
         try:
-            self.relay.insert_order(order)
+            db_id = self.relay.insert_order(order)
         except Exception:
             logger.exception("order 기록 실패")
+            return
+        if db_id and order.broker_order_id:
+            price = order.price or self._price(order.code) or 0
+            self._open_orders[order.broker_order_id] = {
+                "db_id": db_id, "code": order.code, "name": order.name, "side": order.side.value,
+                "qty": order.qty, "price": price, "avg_price": avg_price or 0, "filled": 0,
+                "reason": order.reason}
 
     def _heartbeat(self, market: bool) -> None:
         fields = {"status": self.status, "market_open": market,
