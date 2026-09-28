@@ -71,8 +71,8 @@ def should_enter(
     # entry_rebound_pct 이상 상승해야 매수(급락 중 매수·연쇄 물타기 방지). 0=안 봄.
     def _rebound_wait() -> Optional[str]:
         if params.entry_rebound_pct > 0:
-            if not low_price or price < low_price * (1 + params.entry_rebound_pct):
-                return f"저점 반등 대기(저가 {low_price} 대비 +{params.entry_rebound_pct:.0%} 미달)"
+            if not low_price or price < low_price * (1 + params.entry_rebound_pct / 100):
+                return f"저점 반등 대기(저가 {low_price} 대비 +{params.entry_rebound_pct:g}% 미달)"
         return None
 
     if not holding:
@@ -92,10 +92,10 @@ def should_enter(
     # E2 · 추가매수(물타기): **직전 매수가** 대비 add_on_drop_pct 하락 (2026-09-22 평단→직전매수가)
     #      + 저점 반등(entry_rebound_pct>0 이면). 직전 매수가 미기록(재시작·외부매수)이면 평단으로 대체.
     ref = state.last_buy_price or avg_price
-    if ref and price <= ref * (1 - params.add_on_drop_pct):
+    if ref and price <= ref * (1 - params.add_on_drop_pct / 100):
         if (w := _rebound_wait()):
             return _no_enter("추가매수 " + w)
-        return EnterDecision(True, qty, "add", f"직전매수가 {ref} 대비 {params.add_on_drop_pct:.0%} 하락")
+        return EnterDecision(True, qty, "add", f"직전매수가 {ref} 대비 {params.add_on_drop_pct:g}% 하락")
     return _no_enter("추가매수 조건 미충족")
 
 
@@ -121,7 +121,7 @@ def should_exit(
     if not state.partial_sold:
         # X1 · 분할익절 시작: 평단 대비 +take_profit_pct (envelope 조건 없음)
         if pnl_pct >= params.take_profit_pct:
-            sell_qty = max(1, int(qty * params.first_sell_portion))
+            sell_qty = max(1, int(qty * params.first_sell_portion / 100))
             return ExitDecision(True, sell_qty, "take_profit_partial", mark_partial_sold=True,
                                 note=f"평단 대비 +{pnl_pct:.1f}%")
         return ExitDecision(False, note="익절 조건 미충족")
@@ -134,7 +134,7 @@ def should_exit(
             return ExitDecision(True, qty, "post_sell_gain",
                                 note=f"1차 매도가 {state.partial_sell_price} 대비 +{params.post_sell_gain_pct:g}% 도달")
     peak = state.peak_since_partial or price
-    if price <= peak * (1 - params.post_sell_stop_pct):
+    if price <= peak * (1 - params.post_sell_stop_pct / 100):
         return ExitDecision(True, qty, "trailing_stop",
-                            note=f"고점 {peak} 대비 -{params.post_sell_stop_pct:.0%}")
+                            note=f"고점 {peak} 대비 -{params.post_sell_stop_pct:g}%")
     return ExitDecision(False, note="보유 유지")

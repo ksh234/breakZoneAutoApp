@@ -200,7 +200,7 @@ class StrategyEngine:
                 closes = []
             if closes:
                 self.prev_close[code] = closes[-1]
-                env = compute_envelope(closes, self.params.env_period, self.params.env_band)
+                env = compute_envelope(closes, self.params.env_period, self.params.env_band / 100)
                 if env:
                     self.envelopes[code] = env
 

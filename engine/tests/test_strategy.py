@@ -33,18 +33,31 @@ class TestEnvelope:
 class TestParams:
     def test_from_settings_extra_over_column(self):
         row = {"enabled": True, "max_positions": 3,
-               "extra": {"env_band": 0.15, "take_profit_pct": 20, "entry_drop_pct": 25}}
+               "extra": {"env_band": 15, "take_profit_pct": 20, "entry_drop_pct": 25, "params_version": 2}}
         p = StrategyParams.from_settings(row)
         assert p.enabled is True
         assert p.max_positions == 3         # 컬럼
         assert p.entry_drop_pct == 25       # extra
-        assert p.env_band == 0.15           # extra 우선
+        assert p.env_band == 15             # extra 우선
         assert p.take_profit_pct == 20      # extra
         assert p.env_period == 20           # 기본값
 
+    def test_from_settings_legacy_ratio_converted_to_pct(self):
+        """params_version 없음(구 앱 저장) → 0~1 비율 필드를 %로 변환. 2026-09-28 단위 통일."""
+        row = {"extra": {"env_band": 0.15, "entry_rebound_pct": 0.01, "entry_split_pct": 0.3,
+                         "add_on_drop_pct": 0.07, "first_sell_portion": 0.5, "post_sell_stop_pct": 0.05,
+                         "take_profit_pct": 15, "entry_drop_pct": 30}}
+        p = StrategyParams.from_settings(row)
+        assert (p.env_band, p.entry_rebound_pct, p.entry_split_pct) == (15.0, 1.0, 30.0)
+        assert (p.add_on_drop_pct, p.first_sell_portion, p.post_sell_stop_pct) == (7.0, 50.0, 5.0)
+        assert p.take_profit_pct == 15 and p.entry_drop_pct == 30      # 원래 % 필드는 그대로
+        p2 = StrategyParams.from_settings({"extra": {"add_on_drop_pct": 7.5, "params_version": 2}})
+        assert p2.add_on_drop_pct == 7.5                                # v2 는 변환 없음
+
     def test_one_buy_krw(self):
-        p = _params(per_stock_krw=1_000_000, entry_split_pct=0.30)
+        p = _params(per_stock_krw=1_000_000, entry_split_pct=30)
         assert p.one_buy_krw() == 300_000
+        assert _params(per_stock_krw=1_000_000, entry_split_pct=33.3).one_buy_krw() == 333_000
 
 
 # ── 진입 규칙 ─────────────────────────────────────────
@@ -90,7 +103,7 @@ class TestShouldEnter:
 
     def test_rebound_blocks_at_low(self):
         # 저가=현재가 (반등 0%) → 매수 안 함 (급락 중 매수 방지)
-        p = _params(entry_rebound_pct=0.03)
+        p = _params(entry_rebound_pct=3)
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
                          params=p, state=PositionState("x"), holding=False, avg_price=None,
                          positions_cnt=0, cash=1_000_000, low_price=9000)
@@ -98,7 +111,7 @@ class TestShouldEnter:
 
     def test_rebound_triggers_buy(self):
         # 저가 9000 대비 현재가 9300 = +3.3% ≥ 3% → 매수 (env 하단 9500 아래)
-        p = _params(entry_rebound_pct=0.03)
+        p = _params(entry_rebound_pct=3)
         d = should_enter(drop_ratio=35, status="ok", price=9300, env=self._env(),
                          params=p, state=PositionState("x"), holding=False, avg_price=None,
                          positions_cnt=0, cash=1_000_000, low_price=9000)
@@ -106,7 +119,7 @@ class TestShouldEnter:
 
     def test_rebound_no_low_waits(self):
         # 저점 미형성(low None) + 반등 요구 → 대기
-        p = _params(entry_rebound_pct=0.03)
+        p = _params(entry_rebound_pct=3)
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
                          params=p, state=PositionState("x"), holding=False, avg_price=None,
                          positions_cnt=0, cash=1_000_000, low_price=None)
@@ -155,7 +168,7 @@ class TestShouldEnter:
         assert d.enter and d.kind == "new"   # 900 < lower 950, drop 35 in range, price>=min500
 
     def test_add_on_dip(self):
-        p = _params(add_on_drop_pct=0.07)
+        p = _params(add_on_drop_pct=7)
         st = PositionState("005930", entries_done=1, invested_krw=300_000)
         d = should_enter(drop_ratio=35, status="ok", price=9000, env=self._env(),
                          params=p, state=st, holding=True, avg_price=10000,
@@ -164,7 +177,7 @@ class TestShouldEnter:
 
     def test_add_on_uses_last_buy_price_not_avg(self):
         """2026-09-22: 기준 = 직전 매수가. 더코디 사례 재현 — 평단 기준이면 3회 연쇄, 직전가 기준이면 2회."""
-        p = _params(add_on_drop_pct=0.07, per_stock_krw=12_000_000, max_entries=4)
+        p = _params(add_on_drop_pct=7, per_stock_krw=12_000_000, max_entries=4)
         st = PositionState("005930", entries_done=1, invested_krw=2_995_560, last_buy_price=4770)
         kw = dict(drop_ratio=35, status="ok", env=self._env(), params=p, state=st, holding=True,
                   positions_cnt=1, cash=10_000_000)
@@ -187,7 +200,7 @@ class TestShouldEnter:
 
     def test_add_on_requires_rebound_when_set(self):
         """추매도 저점 반등 조건 적용(2026-09-22): 평단 -7% 충족해도 저점 대비 +1% 미달이면 대기."""
-        p = _params(add_on_drop_pct=0.07, entry_rebound_pct=0.01)
+        p = _params(add_on_drop_pct=7, entry_rebound_pct=1)
         st = PositionState("005930", entries_done=1, invested_krw=300_000)
         kw = dict(drop_ratio=35, status="ok", env=self._env(), params=p, state=st,
                   holding=True, avg_price=4770, positions_cnt=1, cash=10_000_000)
@@ -199,7 +212,7 @@ class TestShouldEnter:
         assert not d.enter
 
     def test_add_on_no_rebound_check_when_zero(self):
-        p = _params(add_on_drop_pct=0.07, entry_rebound_pct=0.0)
+        p = _params(add_on_drop_pct=7, entry_rebound_pct=0)
         st = PositionState("005930", entries_done=1, invested_krw=300_000)
         d = should_enter(drop_ratio=35, status="ok", price=4385, env=self._env(), params=p, state=st,
                          holding=True, avg_price=4770, positions_cnt=1, cash=10_000_000, low_price=None)
@@ -219,7 +232,7 @@ class TestShouldExit:
         return Envelope(ma=10000, upper=11000, lower=9500)
 
     def test_partial_take_profit(self):
-        p = _params(take_profit_pct=15, first_sell_portion=0.5)
+        p = _params(take_profit_pct=15, first_sell_portion=50)
         st = PositionState("005930")
         d = should_exit(qty=100, avg_price=10000, price=12000, env=self._env(),
                         params=p, state=st)
@@ -254,7 +267,7 @@ class TestShouldExit:
         assert d.exit and d.reason == "take_profit_partial" and d.qty == 50
 
     def test_trailing_stop_after_partial(self):
-        p = _params(post_sell_stop_pct=0.05)
+        p = _params(post_sell_stop_pct=5)
         st = PositionState("005930", partial_sold=True, peak_since_partial=13000)
         d = should_exit(qty=50, avg_price=10000, price=12300, env=self._env(),
                         params=p, state=st)

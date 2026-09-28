@@ -14,20 +14,20 @@ const _specs = <(String, String, String, bool, num)>[
   ('기본 설정', 'unfilled_cancel_dev_pct', '미체결 취소 괴리율(%) — 현재가가 주문가에서 이 % 이상 벗어난 상태 기준. 0=괴리 무관(접수 후 시간만)', false, 1.0),
   // 매수 설정
   ('매수 설정', 'entry_drop_pct', '진입 하락비율 기준(%) — 해제가 대비 이 % 이상 하락해야 매수구간', false, 30),
-  ('매수 설정', 'entry_rebound_pct', '저가 반등 매수(0~1, 0.03=3%) — 매수구간 저점서 이만큼 오르면 매수. 신규·추가매수 공통. 0=즉시', false, 0.0),
+  ('매수 설정', 'entry_rebound_pct', '저가 반등 매수(%) — 매수구간 저점서 이 % 오르면 매수. 신규·추가매수 공통. 0=즉시', false, 0.0),
   ('매수 설정', 'per_stock_krw', '종목당 총 투자액(원)', true, 1000000),
-  ('매수 설정', 'entry_split_pct', '1회 매수 비중 (0~1, 0.3=30%)', false, 0.30),
+  ('매수 설정', 'entry_split_pct', '1회 매수 비중(%) — 종목당 총 투자액 대비', false, 30.0),
   ('매수 설정', 'max_entries', '최대 분할매수 횟수', true, 4),
-  ('매수 설정', 'add_on_drop_pct', '추가매수 하락 기준 — 직전 매수가 대비 (0~1, 0.07=직전 매수가 −7%)', false, 0.07),
+  ('매수 설정', 'add_on_drop_pct', '추가매수 하락 기준(%) — 직전 매수가 대비 이 % 하락 시 물타기', false, 7.0),
   // 매도 설정
   ('매도 설정', 'take_profit_pct', '분할익절 수익률(%)', false, 15),
-  ('매도 설정', 'first_sell_portion', '첫 분할매도 비중 (0~1, 0.5=50%)', false, 0.50),
-  ('매도 설정', 'post_sell_stop_pct', '분할매도후 하락 전량 (0~1, 0.05=5%)', false, 0.05),
+  ('매도 설정', 'first_sell_portion', '첫 분할매도 비중(%) — 분할익절 때 파는 비율', false, 50.0),
+  ('매도 설정', 'post_sell_stop_pct', '분할매도후 하락 전량(%) — 고점 대비 이 % 하락 시 잔량 전량', false, 5.0),
   ('매도 설정', 'post_sell_gain_pct', '2차 상승 전량매도(%) — 1차 매도가 대비 이만큼 오르면 잔량 전량 (0=끔)', false, 0),
   ('매도 설정', 'limit_up_pct', '급등 전량매도 기준(%) (예 29≈상한가)', false, 29),
   // Envelope 지표
   ('Envelope 지표', 'env_period', 'Envelope 기간(일)', true, 20),
-  ('Envelope 지표', 'env_band', 'Envelope 밴드 (0~1, 0.1=±10%)', false, 0.10),
+  ('Envelope 지표', 'env_band', 'Envelope 밴드(%) — 이동평균 대비 ±폭', false, 10.0),
 ];
 
 // 그룹 순서 (등장 순서 유지)
@@ -58,11 +58,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _initialized = false;
   bool _saving = false;
 
+  // 단위 통일(2026-09-28): 모든 비율 항목은 %(소수 1자리). 옛 저장값(params_version<2)은 0~1 비율 → ×100 표시.
+  static const _ratioLegacyKeys = {'env_band', 'entry_rebound_pct', 'entry_split_pct',
+                                   'add_on_drop_pct', 'first_sell_portion', 'post_sell_stop_pct'};
+  static const _paramsVersion = 2;
+
   void _initFrom(Settings s) {
     _enabled = s.enabled;
-    for (final (_, key, _, _, def) in _specs) {
-      final v = s.extra[key] ?? def;
-      _ctrls[key] = TextEditingController(text: '$v');
+    final legacy = (s.extra['params_version'] ?? 1) < _paramsVersion;
+    for (final (_, key, _, isInt, def) in _specs) {
+      num v = (s.extra[key] as num?) ?? def;
+      if (legacy && _ratioLegacyKeys.contains(key)) v = (v * 100 * 10).round() / 10;
+      _ctrls[key] = TextEditingController(text: isInt ? '${v.toInt()}' : v.toStringAsFixed(1));
     }
     _initialized = true;
   }
@@ -78,8 +85,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final extra = <String, dynamic>{};
     for (final (_, key, _, isInt, def) in _specs) {
       final t = _ctrls[key]!.text.trim();
-      extra[key] = isInt ? (int.tryParse(t) ?? def.toInt()) : (double.tryParse(t) ?? def.toDouble());
+      extra[key] = isInt
+          ? (int.tryParse(t) ?? def.toInt())
+          : (((double.tryParse(t) ?? def.toDouble()) * 10).round() / 10);   // 소수 1자리
     }
+    extra['params_version'] = _paramsVersion;
     try {
       await saveSettings(enabled: _enabled, extra: extra);
       // 봇에 즉시 반영 요청(명령). 명령이 유실돼도 봇이 30초 주기로 settings 재로드함.

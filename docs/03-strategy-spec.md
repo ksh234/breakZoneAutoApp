@@ -41,7 +41,7 @@
 
 #### Envelope 지표 (신규 — 진입·청산에 사용)
 - 일봉 종가 기준 이동평균 밴드. `MA = SMA(env_period)`, `상단 = MA×(1+env_band)`, `하단 = MA×(1−env_band)`.
-- 파라미터 `env_period`=20, `env_band`=0.10(±10%) (2026-09-02 사용자 확정, 조절 가능).
+- 파라미터 `env_period`=20, `env_band`=10(%: ±10%) (2026-09-02 사용자 확정, 조절 가능. 2026-09-28 단위 % 통일).
 - 과거종가는 pykrx로 조회(현재가 계산과 별개, candidates OHLCV 재사용 가능).
 
 ### 2.1 진입(매수) 규칙 (`strategy/rules.py::should_enter`)
@@ -176,17 +176,17 @@ def tick():                              # 동기(D-011)
 | `enabled` | 자동매매 on/off | false |
 | `mode` | demo/real | demo |
 | `env_period` | envelope 이동평균 기간(일) | 20 |
-| `env_band` | envelope 밴드 비율(±) | 0.10 |
+| `env_band` | envelope 밴드(%, ±) | 10 |
 | `entry_drop_pct` | 진입 하락비율 기준(이 % 이상 하락 시 매수) | 30 |
 | `min_price` | 최소 매수가(원, 이 미만 매수 안 함, 0=무제한) | 1000 |
 | `per_stock_krw` | 종목당 총 투자예정액 | 1,000,000 |
-| `entry_split_pct` | 1회 매수 비중(총액 대비) | 0.30 |
+| `entry_split_pct` | 1회 매수 비중(%, 총액 대비) | 30 |
 | `max_entries` | 최대 분할매수 횟수 | 4 |
-| `add_on_drop_pct` | 추가매수 트리거(**직전 매수가** 대비 하락) | 0.07 |
+| `add_on_drop_pct` | 추가매수 트리거(%, **직전 매수가** 대비 하락) | 7 |
 | `max_positions` | 최대 보유종목수 | 5 |
 | `take_profit_pct` | 분할익절 시작 수익률 % | 15 |
-| `first_sell_portion` | 첫 분할매도 비중 | 0.50 |
-| `post_sell_stop_pct` | 분할매도 후 하락 전량매도 기준 | 0.05 |
+| `first_sell_portion` | 첫 분할매도 비중(%) | 50 |
+| `post_sell_stop_pct` | 분할매도 후 하락 전량매도 기준(%) | 5 |
 | `post_sell_stop_ref` | 위 기준점 | peak (분할매도후 고점) |
 | `post_sell_gain_pct` | 분할매도 후 **1차 매도가 대비** 상승 전량매도 %(0=끔) | 0 |
 | `sell_all_on_limit_up` | 급등 전량매도 사용 on/off | true |
@@ -198,5 +198,6 @@ def tick():                              # 동기(D-011)
 | `unfilled_cancel_dev_pct` | 미체결 취소 괴리율(%): 현재가가 주문가에서 이 % 이상 벗어난 상태 기준. 0=괴리 무관(시간만) | 1.0 |
 
 > 신규 파라미터가 많아 `settings` 컬럼 대신 우선 **`settings.extra` jsonb** 에 담아 유연하게 운용(안정화되면 컬럼 승격). 앱 설정화면(Phase 5)에서 편집.
+> **단위(2026-09-28 통일):** 비율 파라미터는 전부 **%(소수 1자리)**. `entry_rebound_pct`·`entry_split_pct`·`add_on_drop_pct`·`first_sell_portion`·`post_sell_stop_pct`·`env_band` 도 %(예 7 = 7%). `extra.params_version`=2 로 표시하며, 버전 없는 옛 저장값(0~1 비율)은 봇·앱이 ×100 자동 변환.
 
 `extra jsonb` 로 트레일링/부분청산 등 확장 파라미터 수용.
