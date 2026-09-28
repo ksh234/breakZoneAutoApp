@@ -159,6 +159,16 @@ class Relay:
     def delete_strategy_state(self, code: str) -> None:
         self._exec(lambda: self.sb.table("strategy_state").delete().eq("owner", self.owner).eq("code", code))
 
+    # ── 거래 이력(trades: 첫 매수 → 잔고 0 사이클) ──────
+    def load_open_trades(self) -> list[dict]:
+        res = self._exec(lambda: self.sb.table("trades").select("*")
+                         .eq("owner", self.owner).eq("status", "open"))
+        return res.data or []
+
+    def upsert_trade(self, row: dict) -> None:
+        row = {**row, "owner": self.owner, "updated_at": _now()}
+        self._exec(lambda: self.sb.table("trades").upsert(row, on_conflict="id"))
+
     # ── 이중 실행 방지 락(bot_lock) ───────────────────
     def acquire_lock(self, holder: str, stale_sec: int = 90) -> bool:
         """획득 또는 갱신(내가 보유 중이면 heartbeat 갱신). 다른 봇이 살아있으면 False."""

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from ..analysis import pykrx_fetcher
@@ -60,6 +61,7 @@ class StrategyEngine:
         self._day_pnl_at: datetime | None = None      # 당일 실현손익 마지막 조회 시각
         self._cancel_requested: set[str] = set()      # 취소 요청 보낸 주문번호(중복 취소 요청 방지)
         self._dev_since: dict[str, datetime] = {}     # 주문번호별 "현재가-주문가 괴리 ≥ 기준" 상태 시작 시각
+        self.trades: dict[str, dict] = {}             # 종목별 진행 중 거래 사이클(trades 테이블 open 행). 2026-09-28
 
     # ── 라이브/드라이런 전환 ──────────────────────────
     def set_live(self, live: bool, reason: str = "") -> None:
@@ -91,6 +93,13 @@ class StrategyEngine:
                 self.candidate_lows[code] = int(r["zone_low"])
         if rows:
             logger.info("전략상태 복원 %d행 (포지션 %d, 저점 %d)", len(rows), len(self.states), len(self.candidate_lows))
+        try:
+            for t in self.relay.load_open_trades():
+                self.trades[t["code"]] = t
+            if self.trades:
+                logger.info("진행 중 거래 이력 복원 %d건", len(self.trades))
+        except Exception:
+            logger.exception("trades 로드 실패")
         return len(rows)
 
     def _persist_state(self, code: str) -> None:
@@ -231,6 +240,7 @@ class StrategyEngine:
         self._sync_fills(fills)
         self._cancel_stale_orders(fills, now)
         self.sync_positions(pending)
+        self._close_flat_trades(pending)
         self._sync_candidate_display()
         self._update_candidate_lows()
         self._evaluate_exits(pending)
@@ -394,7 +404,15 @@ class StrategyEngine:
             done = (not canceled) and (filled >= o["qty"] or (f["unfilled_qty"] == 0 and filled > 0))
             if filled <= o["filled"] and not canceled:
                 continue
-            o["filled"] = filled
+            # 거래 이력 반영: 체결 증가분(수량·금액·수수료·세금) — 키움 값 기준
+            fp = f.get("filled_price") or o["price"]
+            amount = filled * fp
+            d_qty, d_amt = filled - o["filled"], amount - o["amount"]
+            d_cmsn, d_tax = f.get("commission", 0) - o["cmsn"], f.get("tax", 0) - o["tax"]
+            if d_qty > 0:
+                self._apply_fill_to_trade(o, ord_no, fp, d_qty, d_amt, max(0, d_cmsn), max(0, d_tax))
+            o["filled"], o["amount"] = filled, amount
+            o["cmsn"], o["tax"] = max(o["cmsn"], f.get("commission", 0)), max(o["tax"], f.get("tax", 0))
             fields = {"filled_qty": filled, "status": "filled" if done else ("canceled" if canceled else "partial")}
             if f.get("filled_price"):
                 fields["filled_price"] = f["filled_price"]
@@ -418,6 +436,82 @@ class StrategyEngine:
                     self._emit("fill", "warn", f"{side} 주문 취소/만료", f"{o['name']} 체결 {filled}/{o['qty']}주")
             else:
                 logger.info("부분체결 %s %s %d/%d", o["name"], o["side"], filled, o["qty"])
+
+    # ── 거래 이력(사이클) ───────────────────────────────
+    def _apply_fill_to_trade(self, o: dict, ord_no: str, price: int, d_qty: int, d_amt: int,
+                             d_cmsn: int, d_tax: int) -> None:
+        """체결 증가분을 종목의 진행 중 사이클에 누적. 매수 체결인데 열린 사이클이 없으면 새로 시작."""
+        code = o["code"]
+        t = self.trades.get(code)
+        now = self._now()
+        if t is None:
+            if o["side"] != "sell":
+                t = {"id": str(uuid.uuid4()), "code": code, "name": o["name"], "status": "open",
+                     "first_buy_at": now.isoformat(), "last_sell_at": None,
+                     "buy_qty": 0, "buy_amount": 0, "sell_qty": 0, "sell_amount": 0,
+                     "buy_count": 0, "sell_count": 0, "commission": 0, "tax": 0,
+                     "profit": None, "profit_pct": None, "exit_reason": None, "holding_days": None, "orders": []}
+                self.trades[code] = t
+            else:
+                logger.warning("매도 체결인데 열린 거래 이력 없음(재시작 전 매수?) %s — 이력 미기록", code)
+                return
+        orders = t.setdefault("orders", [])
+        entry = next((x for x in orders if x.get("ord_no") == ord_no), None)
+        if entry is None:
+            entry = {"ord_no": ord_no, "side": o["side"], "qty": 0, "price": price,
+                     "at": now.isoformat(), "reason": o.get("reason", "")}
+            orders.append(entry)
+            if o["side"] == "sell":
+                t["sell_count"] = int(t.get("sell_count") or 0) + 1
+            else:
+                t["buy_count"] = int(t.get("buy_count") or 0) + 1
+        entry["qty"] += d_qty
+        entry["price"] = price
+        if o["side"] == "sell":
+            t["sell_qty"] = int(t.get("sell_qty") or 0) + d_qty
+            t["sell_amount"] = int(t.get("sell_amount") or 0) + d_amt
+            t["exit_reason"] = o.get("reason") or t.get("exit_reason")
+        else:
+            t["buy_qty"] = int(t.get("buy_qty") or 0) + d_qty
+            t["buy_amount"] = int(t.get("buy_amount") or 0) + d_amt
+        t["commission"] = int(t.get("commission") or 0) + d_cmsn
+        t["tax"] = int(t.get("tax") or 0) + d_tax
+        self._persist_trade(t)
+
+    def _close_flat_trades(self, pending: set[str]) -> None:
+        """잔고에서 사라진 종목의 열린 사이클을 마감(수익금·수익률·보유일수 확정). sync_positions 이후 호출."""
+        for code, t in list(self.trades.items()):
+            if code in self.positions or code in pending or self._state_protected(code, pending):
+                continue
+            now = self._now()
+            buy_amt = int(t.get("buy_amount") or 0)
+            if int(t.get("sell_qty") or 0) > 0 and buy_amt > 0:
+                profit = int(t.get("sell_amount") or 0) - buy_amt - int(t.get("commission") or 0) - int(t.get("tax") or 0)
+                t["profit"] = profit
+                t["profit_pct"] = round(profit / buy_amt * 100, 2)
+            else:
+                t["exit_reason"] = "external"   # 봇이 모르는 경로로 사라짐(외부 매도·재시작 전 주문 등) → 손익 미확정
+            t["status"] = "closed"
+            t["last_sell_at"] = now.isoformat()
+            try:
+                first = datetime.fromisoformat(str(t["first_buy_at"]))
+                t["holding_days"] = max(0, (now.date() - first.date()).days)
+            except Exception:
+                t["holding_days"] = None
+            self._persist_trade(t)
+            self.trades.pop(code, None)
+            if t.get("profit") is not None:
+                self._emit("trade", "info", "거래 종료",
+                           f"{t.get('name')} {t.get('exit_reason') or ''} 수익 {t['profit']:,}원 ({t['profit_pct']:+.2f}%), "
+                           f"매수 {t['buy_amount']:,} → 매도 {t['sell_amount']:,}")
+            else:
+                self._emit("trade", "warn", "거래 종료(손익 미확정)", f"{t.get('name')} — 봇 외 경로로 잔고 소진")
+
+    def _persist_trade(self, t: dict) -> None:
+        try:
+            self.relay.upsert_trade(t)
+        except Exception:
+            logger.exception("trade 저장 실패 %s", t.get("code"))
 
     def _expire_open_orders(self) -> None:
         """날짜가 바뀌면 남은 추적 주문은 당일 만료(취소)로 마감."""
@@ -619,7 +713,7 @@ class StrategyEngine:
             self._open_orders[order.broker_order_id] = {
                 "db_id": db_id, "code": order.code, "name": order.name, "side": order.side.value,
                 "qty": order.qty, "price": price, "avg_price": avg_price or 0, "filled": 0,
-                "reason": order.reason}
+                "amount": 0, "cmsn": 0, "tax": 0, "reason": order.reason}
 
     def _refresh_day_pnl(self) -> None:
         """당일 실현손익 = 브로커 값(수수료·세금 차감, D-016). DAY_PNL_REFRESH_SEC 마다. 실패 시 이전 값 유지."""

@@ -77,6 +77,34 @@ String orderStatusKr(String s) => switch (s) {
   'canceled' => '취소/만료', 'rejected' => '거부', 'pending' => '대기', _ => s,
 };
 
+class Trade {
+  final String id, code, name, status, exitReason;
+  final DateTime firstBuyAt;
+  final DateTime? lastSellAt;
+  final int buyQty, buyAmount, sellQty, sellAmount, buyCount, sellCount, commission, tax;
+  final int? profit, holdingDays;
+  final double? profitPct;
+  final List<Map<String, dynamic>> orders;
+  Trade({required this.id, required this.code, required this.name, required this.status,
+    required this.exitReason, required this.firstBuyAt, this.lastSellAt,
+    required this.buyQty, required this.buyAmount, required this.sellQty, required this.sellAmount,
+    required this.buyCount, required this.sellCount, required this.commission, required this.tax,
+    this.profit, this.profitPct, this.holdingDays, this.orders = const []});
+  factory Trade.fromMap(Map<String, dynamic> m) => Trade(
+    id: _s(m['id']), code: _s(m['code']), name: _s(m['name']), status: _s(m['status']),
+    exitReason: _s(m['exit_reason']),
+    firstBuyAt: DateTime.tryParse(_s(m['first_buy_at']))?.toLocal() ?? DateTime.now(),
+    lastSellAt: DateTime.tryParse(_s(m['last_sell_at']))?.toLocal(),
+    buyQty: _i(m['buy_qty']), buyAmount: _i(m['buy_amount']), sellQty: _i(m['sell_qty']),
+    sellAmount: _i(m['sell_amount']), buyCount: _i(m['buy_count']), sellCount: _i(m['sell_count']),
+    commission: _i(m['commission']), tax: _i(m['tax']),
+    profit: m['profit'] == null ? null : _i(m['profit']),
+    profitPct: m['profit_pct'] == null ? null : _n(m['profit_pct']).toDouble(),
+    holdingDays: m['holding_days'] == null ? null : _i(m['holding_days']),
+    orders: (m['orders'] is List) ? (m['orders'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : const [],
+  );
+}
+
 class EventRow {
   final String id, type, severity, title, message;
   final DateTime? createdAt;

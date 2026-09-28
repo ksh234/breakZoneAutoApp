@@ -445,3 +445,90 @@ def test_cancel_failure_emits_and_retries_next_tick():
     broker.cancel.side_effect = None
     e._cancel_stale_orders(fills, clock["now"])
     assert broker.cancel.call_count == 2                      # 실패분은 재시도
+
+
+# ── 2026-09-28: 거래 이력(trades 사이클) ──
+def _cycle_engine():
+    clock = {"now": datetime(2026, 9, 22, 13, 45, tzinfo=KST)}
+    broker = _broker(price=4770, positions=[])
+    e = StrategyEngine(broker, MagicMock(), now=lambda: clock["now"])
+    e.status = "running"; e.params = StrategyParams(enabled=True, per_stock_krw=12_000_000)
+    e.relay.insert_order.return_value = "db-1"
+    e.relay.load_open_trades.return_value = []
+    return e, broker, clock
+
+
+def _track(e, ord_no, side, qty, price, reason):
+    e._open_orders[ord_no] = {"db_id": "db-" + ord_no, "code": "224060", "name": "더코디", "side": side,
+                              "qty": qty, "price": price, "avg_price": 4307, "filled": 0, "amount": 0,
+                              "cmsn": 0, "tax": 0, "reason": reason}
+
+
+def _f(ord_no, qty, filled, price, cmsn=0, tax=0, unfilled=None):
+    return {"ord_no": ord_no, "code": "224060", "qty": qty, "filled_qty": filled,
+            "unfilled_qty": qty - filled if unfilled is None else unfilled,
+            "filled_price": price, "commission": cmsn, "tax": tax, "status": "체결", "order_time": "134513"}
+
+
+def test_trade_cycle_buy_fills_open_trade_then_sell_closes_with_kiwoom_numbers():
+    """더코디 실제 수치 재현: 매수 4회(체결가 기준 11,970,450) → 매도 2,779@5,710, 수수료·세금 → 수익 3,768,486."""
+    e, broker, clock = _cycle_engine()
+    buys = [("0156070", 628, 4745, 10467), ("0160925", 684, 4379, 10483), ("0162256", 731, 4100, 10490), ("0162337", 736, 4074, 10495)]
+    for ord_no, q, p, c in buys:
+        _track(e, ord_no, "buy", q, p, "new" if ord_no == "0156070" else "add")
+        e._sync_fills([_f(ord_no, q, q, p, cmsn=c)])
+    t = e.trades["224060"]
+    assert t["status"] == "open" and t["buy_count"] == 4 and t["buy_qty"] == 2779
+    assert t["buy_amount"] == 628*4745 + 684*4379 + 731*4100 + 736*4074 == 11_970_660   # 키움 pur_amt 11,970,450 과 210 차(평균단가 반올림)
+    assert t["commission"] == 41_935 and len(t["orders"]) == 4
+    assert e.relay.upsert_trade.call_count == 4 and e.relay.upsert_trade.call_args.args[0]["id"] == t["id"]
+    # 부분체결 매도 → 누적, 아직 open
+    clock["now"] = datetime(2026, 9, 28, 11, 7, tzinfo=KST)
+    _track(e, "0088098", "sell", 2779, 5710, "limit_up")
+    e._sync_fills([_f("0088098", 2779, 516, 5710, cmsn=10300, tax=5890)])
+    assert t["sell_qty"] == 516 and t["sell_count"] == 1 and t["status"] == "open"
+    e._sync_fills([_f("0088098", 2779, 2779, 5710, cmsn=55500, tax=31734)])
+    assert t["sell_qty"] == 2779 and t["sell_amount"] == 2779 * 5710 == 15_868_090
+    assert t["commission"] == 41_935 + 55_500 and t["tax"] == 31_734
+    # 잔고 0 → 사이클 마감
+    e.positions = {}
+    e._close_flat_trades(set())
+    assert "224060" not in e.trades
+    row = e.relay.upsert_trade.call_args.args[0]
+    assert row["status"] == "closed" and row["exit_reason"] == "limit_up" and row["holding_days"] == 6
+    assert row["profit"] == 15_868_090 - 11_970_660 - 97_435 - 31_734 == 3_768_261   # 키움 실현손익 3,768,486 과 수백 원 차(체결가 반올림·수수료 라운딩)
+    assert row["profit_pct"] == round(3_768_261 / 11_970_660 * 100, 2)
+    assert any(c.kwargs["title"] == "거래 종료" for c in e.relay.insert_event.call_args_list)
+
+
+def test_trade_not_closed_while_position_or_pending_exists():
+    e, broker, clock = _cycle_engine()
+    _track(e, "A", "buy", 10, 1000, "new"); e._sync_fills([_f("A", 10, 10, 1000)])
+    e.positions = {"224060": Position(code="224060", name="더코디", qty=10, avg_price=1000, current_price=1000)}
+    e._close_flat_trades(set()); assert "224060" in e.trades
+    e.positions = {}
+    e._close_flat_trades({"224060"}); assert "224060" in e.trades           # 미체결 있음 → 유지
+    e._buy_at["224060"] = clock["now"]
+    e._close_flat_trades(set()); assert "224060" in e.trades                # 매수 직후 유예 → 유지
+
+
+def test_trade_closed_external_when_no_sell_recorded():
+    e, broker, clock = _cycle_engine()
+    _track(e, "A", "buy", 10, 1000, "new"); e._sync_fills([_f("A", 10, 10, 1000)])
+    e.positions = {}
+    e._close_flat_trades(set())
+    row = e.relay.upsert_trade.call_args.args[0]
+    assert row["status"] == "closed" and row["exit_reason"] == "external" and row["profit"] is None
+
+
+def test_restore_state_loads_open_trades():
+    e, broker, clock = _cycle_engine()
+    e.relay.load_strategy_states.return_value = []
+    e.relay.load_open_trades.return_value = [{"id": "t1", "code": "224060", "name": "더코디", "status": "open",
+                                             "first_buy_at": "2026-09-22T13:45:00+09:00", "buy_qty": 2779,
+                                             "buy_amount": 11970450, "sell_qty": 0, "sell_amount": 0,
+                                             "buy_count": 4, "sell_count": 0, "commission": 41935, "tax": 0, "orders": []}]
+    e.restore_state()
+    assert e.trades["224060"]["id"] == "t1"
+    _track(e, "S", "sell", 2779, 5710, "limit_up"); e._sync_fills([_f("S", 2779, 2779, 5710)])
+    assert e.trades["224060"]["sell_qty"] == 2779 and e.trades["224060"]["buy_count"] == 4

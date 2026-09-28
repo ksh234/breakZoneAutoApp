@@ -35,6 +35,12 @@ final eventsProvider = StreamProvider.autoDispose<List<EventRow>>((ref) {
       .map((rows) => rows.map(EventRow.fromMap).toList());
 });
 
+final tradesProvider = StreamProvider.autoDispose<List<Trade>>((ref) {
+  return supabase.from('trades').stream(primaryKey: ['id'])
+      .order('first_buy_at', ascending: false).limit(200)
+      .map((rows) => rows.map(Trade.fromMap).toList());
+});
+
 // ── 쓰기 (제어) ──
 Future<void> sendCommand(String type, {Map<String, dynamic>? payload}) async {
   await supabase.from('commands').insert({

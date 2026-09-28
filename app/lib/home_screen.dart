@@ -4,6 +4,7 @@ import 'features/dashboard_screen.dart';
 import 'features/control_screen.dart';
 import 'features/settings_screen.dart';
 import 'features/lists.dart';
+import 'features/history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ('후보', Icons.list_alt, CandidatesView()),
     ('포지션', Icons.account_balance_wallet, PositionsView()),
     ('주문', Icons.receipt_long, OrdersView()),
+    ('이력', Icons.history, HistoryScreen()),
     ('이벤트', Icons.notifications, EventsView()),
     ('제어', Icons.tune, ControlScreen()),
     ('설정', Icons.settings, SettingsScreen()),

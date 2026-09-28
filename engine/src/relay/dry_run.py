@@ -12,7 +12,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_READS = {"load_settings", "load_strategy_states"}
+_READS = {"load_settings", "load_strategy_states", "load_open_trades"}
 
 
 class DryRunRelay:

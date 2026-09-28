@@ -106,6 +106,9 @@ def test_dry_run_relay_ignores_writes_and_delegates_reads():
     d.upsert_candidates([]); d.save_strategy_state("c", entries_done=1); d.start_command_listener(lambda r: None)
     assert d.acquire_lock("h") is False
     assert d.load_settings() == {"enabled": True}
+    real.load_open_trades.return_value = [{"code": "x"}]
+    assert d.load_open_trades() == [{"code": "x"}]           # 읽기 위임
+    d.upsert_trade({"id": "t"}); assert not real.upsert_trade.called
     assert not real.push_bot_state.called and not real.insert_event.called
     assert not real.insert_order.called and not real.start_command_listener.called
 

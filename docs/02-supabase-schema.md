@@ -171,6 +171,8 @@ create table devices (
 | `strategy_state` | 종목별 전략상태 영속화: `entries_done`·`invested_krw`·`partial_sold`·`peak_since_partial`(포지션), `zone_low`(매수구간 저점, 미보유 후보도). 변경 시 upsert, 청산·저점 리셋 시 삭제. 봇 시작 시 복원 | (owner, code) |
 둘 다 RLS select(본인) 만. `bot_lock` 은 Realtime publication 포함(앱 표시 후속). 상세: docs/05 §4, docs/03 §2.2b.
 
+| `trades` (0009, 2026-09-28) | 거래 이력 = 사이클(첫 매수 → 잔고 0). `status open/closed`, `first_buy_at/last_sell_at`, `buy/sell_qty·amount·count`, `commission·tax`, `profit·profit_pct·holding_days`, `exit_reason`, `orders jsonb`. 금액은 키움 체결 실데이터 합계(D-016). open 은 (owner,code) 유일. Realtime 포함 → 앱 "이력" 탭 | id uuid |
+
 ## 3. RLS 정책 (`0002_rls.sql`)
 
 ```sql
