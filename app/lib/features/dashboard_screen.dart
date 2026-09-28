@@ -91,8 +91,9 @@ class _BotCard extends StatelessWidget {
           // 영웅문 잔고 화면과 같은 정의(2026-09-23): 총자산=예수금+주식평가, 주문가능=예수금-매수·수수료 예정분
           _row('총자산', '${_won.format(s.equity)} 원'),
           _row('주식 평가금', '${_won.format(s.stockValue)} 원'),
-          _row('예수금', '${_won.format(s.deposit)} 원'),
-          _row('주문가능금액', '${_won.format(s.cash)} 원'),
+          // 예수금(D-day)=오늘 결제 기준 현금(급히 인출할 때 의미). 주문가능=D+2 예수금(오늘 매도대금 포함). 2026-09-28 사용자 결정
+          _row('예수금 (D-day)', '${_won.format(s.deposit)} 원'),
+          _row('주문가능금액 (예수금 D+2)', '${_won.format(s.cash)} 원'),
           _row('평가손익', '${s.unrealizedPnl >= 0 ? '+' : ''}${_won.format(s.unrealizedPnl)} 원',
               color: s.unrealizedPnl >= 0 ? Colors.green : Colors.red),
           _row('당일 실현손익', '${s.dayPnl >= 0 ? '+' : ''}${_won.format(s.dayPnl)} 원',
