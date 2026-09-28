@@ -45,6 +45,7 @@ ROADMAP/docs의 도메인·TR코드·호출한도 값은 **자리표시자**다.
 - Supabase 스키마 변경 = `supabase/migrations/NNNN_*.sql` 작성 → `D:\dev\supabase\supabase.exe db push` (CLI link 완료, DB 비밀번호 불필요).
 - 봇 실행/검증: `engine/run_bot.bat`(바탕화면 `breakZone 봇 시작.bat`). 테스트 `engine/.venv/Scripts/python.exe -m pytest -q`. Flutter는 `D:\dev\flutter\bin\flutter.bat` 전체경로.
 - 요청 범위 밖 코드 변경은 먼저 물어본다(사용자 피드백 2026-09-03).
+- **APK 빌드 전 `app/pubspec.yaml` 의 `version: x.y.z+N` 빌드번호 N 을 올린다**(같은 번호면 폰이 새 앱으로 인식 못 해 화면이 안 바뀜 — 2026-09-28 이력 탭 미표시 사례).
 
 ## 환경
 - OS: Windows. 셸은 PowerShell(주) / Bash 병행. 경로는 절대경로 선호.
