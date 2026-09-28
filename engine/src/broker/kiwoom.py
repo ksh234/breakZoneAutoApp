@@ -291,6 +291,7 @@ class KiwoomRestBroker(BrokerAdapter):
                 "unfilled_qty": to_int(r.get("oso_qty")), "filled_price": to_int(r.get("cntr_pric")),
                 "commission": to_int(r.get("tdy_trde_cmsn")), "tax": to_int(r.get("tdy_trde_tax")),
                 "status": str(r.get("ord_stt", "") or ""),   # 예: 접수/체결/확인(취소)
+                "order_time": str(r.get("ord_tm", "") or ""),  # HHMMSS (당일)
             })
         return out
 

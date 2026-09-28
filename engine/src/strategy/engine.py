@@ -14,7 +14,7 @@ from ..analysis.calculator import compute_drop_ratio
 from ..analysis.candidates import Candidate, build_candidates, compute_status
 from ..broker.base import BrokerAdapter
 from ..broker.errors import BrokerError
-from ..broker.models import OrderType, Position, Side
+from ..broker.models import Order, OrderType, Position, Side
 from ..relay import DryRunRelay, Relay
 from .indicators import Envelope, compute_envelope
 from .market import is_market_open
@@ -58,6 +58,7 @@ class StrategyEngine:
         self._open_orders: dict[str, dict] = {}
         self._sell_done_at: dict[str, datetime] = {}  # 종목별 매도 전량체결 시각(FILL_GRACE_SEC 재매도 금지)
         self._day_pnl_at: datetime | None = None      # 당일 실현손익 마지막 조회 시각
+        self._cancel_requested: set[str] = set()      # 취소 요청 보낸 주문번호(중복 취소 요청 방지)
 
     # ── 라이브/드라이런 전환 ──────────────────────────
     def set_live(self, live: bool, reason: str = "") -> None:
@@ -225,7 +226,9 @@ class StrategyEngine:
             return
         unfilled = self._unfilled_orders()
         pending = {u["code"] for u in unfilled}
-        self._sync_fills(unfilled)
+        fills = self._order_fills()
+        self._sync_fills(fills)
+        self._cancel_stale_orders(fills, now)
         self.sync_positions(pending)
         self._sync_candidate_display()
         self._update_candidate_lows()
@@ -312,17 +315,52 @@ class StrategyEngine:
     def _pending_codes(self) -> set[str]:
         return {u["code"] for u in self._unfilled_orders()}
 
+    def _order_fills(self) -> list[dict]:
+        try:
+            return self.broker.get_order_fills()
+        except Exception:
+            logger.exception("체결 조회 실패")
+            return []
+
+    # ── 미체결 취소 ───────────────────────────────────
+    def _cancel_stale_orders(self, fills: list[dict], now: datetime) -> None:
+        """접수 후 unfilled_cancel_min 분 넘게 미체결 잔량이 있는 주문(매수·매도, 추적 여부 무관)을 취소.
+        취소 뒤 다음 tick 부터 규칙이 현재가로 재평가 → 조건 맞으면 재주문. 0=안 함. (2026-09-28 사용자 설정)"""
+        limit = self.params.unfilled_cancel_min
+        if limit <= 0 or not self.live:
+            return
+        for f in fills:
+            if f.get("unfilled_qty", 0) <= 0 or f["ord_no"] in self._cancel_requested:
+                continue
+            tm = f.get("order_time") or ""
+            if len(tm) < 6:
+                continue
+            try:
+                placed = now.replace(hour=int(tm[:2]), minute=int(tm[2:4]), second=int(tm[4:6]), microsecond=0)
+            except ValueError:
+                continue
+            age_min = (now - placed).total_seconds() / 60
+            if age_min < limit:
+                continue
+            o = self._open_orders.get(f["ord_no"])
+            order = Order(code=f["code"], name=(o or {}).get("name", f["code"]), side=Side.SELL if (o or {}).get("side") == "sell" else Side.BUY,
+                          qty=f["qty"], order_type=OrderType.LIMIT, broker_order_id=f["ord_no"])
+            try:
+                self.broker.cancel(order)
+            except BrokerError as e:
+                self._emit("error", "warn", "미체결 취소 실패", f"{order.name} ord_no={f['ord_no']}: {e}")
+                continue
+            self._cancel_requested.add(f["ord_no"])
+            self._emit("cancel", "info", "미체결 취소",
+                       f"{order.name} 주문 {f['ord_no']} — {age_min:.0f}분 경과, 미체결 {f['unfilled_qty']}/{f['qty']}주 (기준 {limit}분)")
+
     # ── 체결 동기화 ───────────────────────────────────
-    def _sync_fills(self, unfilled: list[dict]) -> None:
+    def _sync_fills(self, fills_list: list[dict]) -> None:
         """추적 중인 주문의 체결을 **브로커 체결 조회(ka10076) 실데이터**로 갱신 → orders(filled_qty/filled_price/status).
-        실현손익은 여기서 계산하지 않음(브로커 당일실현손익을 하트비트에서 조회, D-016). unfilled 는 조회 실패 시 폴백."""
+        실현손익은 여기서 계산하지 않음(브로커 당일실현손익을 하트비트에서 조회, D-016)."""
         if not self._open_orders:
             return
-        try:
-            fills = {f["ord_no"]: f for f in self.broker.get_order_fills()}
-        except Exception:
-            logger.exception("체결 조회 실패 — 이번 tick 건너뜀")
-            return
+        fills = {f["ord_no"]: f for f in fills_list}
         for ord_no, o in list(self._open_orders.items()):
             f = fills.get(ord_no)
             if not f:
@@ -344,6 +382,7 @@ class StrategyEngine:
                 logger.exception("order 체결 갱신 실패 %s", ord_no)
             if done or canceled:
                 self._open_orders.pop(ord_no, None)
+                self._cancel_requested.discard(ord_no)
                 if o["side"] == "sell" and filled > 0:
                     self._sell_done_at[o["code"]] = self._now()
                 side = "매도" if o["side"] == "sell" else "매수"

@@ -271,9 +271,9 @@ def _sell_engine():
     return e, broker
 
 
-def _fill(filled, unfilled, status="체결", price=5710, cmsn=0, tax=0):
+def _fill(filled, unfilled, status="체결", price=5710, cmsn=0, tax=0, order_time="110739"):
     return {"ord_no": "0088098", "code": "224060", "qty": 2779, "filled_qty": filled, "unfilled_qty": unfilled,
-            "filled_price": price, "commission": cmsn, "tax": tax, "status": status}
+            "filled_price": price, "commission": cmsn, "tax": tax, "status": status, "order_time": order_time}
 
 
 @patch("src.strategy.engine.is_market_open", return_value=True)
@@ -347,3 +347,60 @@ def test_dry_run_does_not_track_orders():
     with patch("src.strategy.engine.is_market_open", return_value=True):
         e.tick()
     assert e._open_orders == {}
+
+
+# ── 2026-09-28: 미체결 취소(unfilled_cancel_min) ──
+def _stale_engine(minutes_ago, limit=10):
+    clock = {"now": datetime(2026, 9, 28, 11, 30, 0, tzinfo=KST)}
+    broker = _broker(positions=[])
+    e = StrategyEngine(broker, MagicMock(), now=lambda: clock["now"])
+    e.status = "running"; e.params = StrategyParams(enabled=True, unfilled_cancel_min=limit)
+    placed = clock["now"] - timedelta(minutes=minutes_ago)
+    fills = [_fill(516, 2263, order_time=placed.strftime("%H%M%S"))]
+    return e, broker, fills, clock["now"]
+
+
+def test_stale_unfilled_order_is_canceled_once():
+    e, broker, fills, now = _stale_engine(minutes_ago=11)
+    e._cancel_stale_orders(fills, now)
+    assert broker.cancel.call_count == 1
+    o = broker.cancel.call_args.args[0]
+    assert o.broker_order_id == "0088098" and o.code == "224060"
+    ev = [c.kwargs for c in e.relay.insert_event.call_args_list if c.kwargs["title"] == "미체결 취소"]
+    assert ev and "2263/2779" in ev[0]["message"]
+    e._cancel_stale_orders(fills, now)                         # 같은 주문 재요청 없음
+    assert broker.cancel.call_count == 1
+
+
+def test_fresh_unfilled_order_not_canceled():
+    e, broker, fills, now = _stale_engine(minutes_ago=9)
+    e._cancel_stale_orders(fills, now)
+    assert not broker.cancel.called
+
+
+def test_cancel_disabled_when_zero_or_dry_run():
+    e, broker, fills, now = _stale_engine(minutes_ago=30, limit=0)
+    e._cancel_stale_orders(fills, now)
+    assert not broker.cancel.called
+    e2, broker2, fills2, now2 = _stale_engine(minutes_ago=30)
+    e2.set_live(False, "t")
+    e2._cancel_stale_orders(fills2, now2)
+    assert not broker2.cancel.called
+
+
+def test_fully_filled_order_not_canceled():
+    e, broker, fills, now = _stale_engine(minutes_ago=30)
+    fills[0]["unfilled_qty"] = 0
+    e._cancel_stale_orders(fills, now)
+    assert not broker.cancel.called
+
+
+def test_cancel_failure_emits_and_retries_next_tick():
+    from src.broker.errors import BrokerError
+    e, broker, fills, now = _stale_engine(minutes_ago=30)
+    broker.cancel.side_effect = BrokerError("거부")
+    e._cancel_stale_orders(fills, now)
+    assert any(c.kwargs["title"] == "미체결 취소 실패" for c in e.relay.insert_event.call_args_list)
+    broker.cancel.side_effect = None
+    e._cancel_stale_orders(fills, now)
+    assert broker.cancel.call_count == 2                      # 실패분은 재시도
