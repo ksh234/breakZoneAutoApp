@@ -32,8 +32,8 @@ class StrategyParams:
     max_unrealized_loss_krw: int = 500_000   # 보유 평가손실이 이 금액 이상이면 신규매수 중단(하락장 방어)
     order_type: str = "limit"      # limit | market
     tick_seconds: int = 5
-    unfilled_cancel_min: int = 10  # 미체결 취소(분): 접수 후 이 시간 넘게 미체결이면 주문 취소(매수·매도 공통). 0=안 함. 2026-09-28
-    unfilled_cancel_min: int = 10  # 미체결 취소(분): 접수 후 이 시간 넘게 미체결이면 주문 취소(매수·매도 공통). 0=안 함. 2026-09-28
+    unfilled_cancel_min: int = 10        # 미체결 취소 지속시간(분): 아래 괴리 상태가 이 시간 이상 지속되면 취소(매수·매도 공통). 0=안 함
+    unfilled_cancel_dev_pct: float = 1.0 # 미체결 취소 괴리율(%): 현재가가 주문가에서 이 % 이상 벗어난 상태 기준. 0=괴리 무관(접수 후 시간만). 2026-09-28
 
     @classmethod
     def from_settings(cls, settings_row: dict[str, Any] | None) -> "StrategyParams":

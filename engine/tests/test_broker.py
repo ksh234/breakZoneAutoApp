@@ -146,8 +146,10 @@ class TestAccount:
         b = _broker()
         b._session.post.return_value = _resp({"return_code": 0, "cntr": [
             {"ord_no": "0088098", "stk_cd": "224060", "ord_qty": "2779", "cntr_qty": "516", "oso_qty": "2263",
-             "cntr_pric": "5710", "tdy_trde_cmsn": "10000", "tdy_trde_tax": "5000", "ord_stt": "체결"}]})
+             "cntr_pric": "5710", "tdy_trde_cmsn": "10000", "tdy_trde_tax": "5000", "ord_stt": "체결",
+             "ord_tm": "110739", "ord_pric": "5710"}]})
         f = b.get_order_fills()[0]
+        assert f["order_time"] == "110739" and f["order_price"] == 5710
         assert f["ord_no"] == "0088098" and f["code"] == "224060" and f["qty"] == 2779
         assert f["filled_qty"] == 516 and f["unfilled_qty"] == 2263 and f["filled_price"] == 5710
         assert f["commission"] == 10000 and f["tax"] == 5000 and f["status"] == "체결"

@@ -349,58 +349,99 @@ def test_dry_run_does_not_track_orders():
     assert e._open_orders == {}
 
 
-# ── 2026-09-28: 미체결 취소(unfilled_cancel_min) ──
-def _stale_engine(minutes_ago, limit=10):
+# ── 2026-09-28: 미체결 취소 — 괴리율 X% 이상이 N분 지속 (unfilled_cancel_min · unfilled_cancel_dev_pct) ──
+def _stale_engine(minutes_ago, limit=10, dev=0.0, price=5710, order_price=5710):
     clock = {"now": datetime(2026, 9, 28, 11, 30, 0, tzinfo=KST)}
-    broker = _broker(positions=[])
+    broker = _broker(positions=[], price=price)
     e = StrategyEngine(broker, MagicMock(), now=lambda: clock["now"])
-    e.status = "running"; e.params = StrategyParams(enabled=True, unfilled_cancel_min=limit)
+    e.status = "running"
+    e.params = StrategyParams(enabled=True, unfilled_cancel_min=limit, unfilled_cancel_dev_pct=dev)
     placed = clock["now"] - timedelta(minutes=minutes_ago)
     fills = [_fill(516, 2263, order_time=placed.strftime("%H%M%S"))]
-    return e, broker, fills, clock["now"]
+    fills[0]["order_price"] = order_price
+    return e, broker, fills, clock
 
 
-def test_stale_unfilled_order_is_canceled_once():
-    e, broker, fills, now = _stale_engine(minutes_ago=11)
-    e._cancel_stale_orders(fills, now)
+def test_time_only_mode_cancels_after_limit():
+    """괴리율 0 = 접수 후 경과시간만."""
+    e, broker, fills, clock = _stale_engine(minutes_ago=11, dev=0)
+    e._cancel_stale_orders(fills, clock["now"])
     assert broker.cancel.call_count == 1
     o = broker.cancel.call_args.args[0]
     assert o.broker_order_id == "0088098" and o.code == "224060"
     ev = [c.kwargs for c in e.relay.insert_event.call_args_list if c.kwargs["title"] == "미체결 취소"]
-    assert ev and "2263/2779" in ev[0]["message"]
-    e._cancel_stale_orders(fills, now)                         # 같은 주문 재요청 없음
+    assert ev and "2263/2779" in ev[0]["message"] and "접수 후 11분" in ev[0]["message"]
+    e._cancel_stale_orders(fills, clock["now"])                # 같은 주문 재요청 없음
     assert broker.cancel.call_count == 1
 
 
-def test_fresh_unfilled_order_not_canceled():
-    e, broker, fills, now = _stale_engine(minutes_ago=9)
-    e._cancel_stale_orders(fills, now)
+def test_time_only_mode_fresh_order_not_canceled():
+    e, broker, fills, clock = _stale_engine(minutes_ago=9, dev=0)
+    e._cancel_stale_orders(fills, clock["now"])
+    assert not broker.cancel.called
+
+
+def test_deviation_mode_requires_persistence():
+    """괴리 1%: 접수 30분 지났어도 괴리 상태가 10분 지속돼야 취소. 주문가 5710, 현재가 5600(-1.9%)."""
+    e, broker, fills, clock = _stale_engine(minutes_ago=30, dev=1.0, price=5600)
+    e._cancel_stale_orders(fills, clock["now"])                # 괴리 시작(타이머 0분)
+    assert not broker.cancel.called and "0088098" in e._dev_since
+    clock["now"] += timedelta(minutes=9)
+    e._cancel_stale_orders(fills, clock["now"])                # 9분 → 아직
+    assert not broker.cancel.called
+    clock["now"] += timedelta(minutes=1)
+    e._cancel_stale_orders(fills, clock["now"])                # 10분 지속 → 취소
+    assert broker.cancel.call_count == 1
+    msg = [c.kwargs for c in e.relay.insert_event.call_args_list if c.kwargs["title"] == "미체결 취소"][0]["message"]
+    assert "괴리 1.9%" in msg and "10분 지속" in msg
+
+
+def test_deviation_mode_no_cancel_while_price_at_order_price():
+    """상한가처럼 현재가 = 주문가면(괴리 0%) 아무리 오래 미체결이어도 취소 안 함(대기열 유지)."""
+    e, broker, fills, clock = _stale_engine(minutes_ago=60, dev=1.0, price=5710)
+    for _ in range(4):
+        e._cancel_stale_orders(fills, clock["now"]); clock["now"] += timedelta(minutes=5)
+    assert not broker.cancel.called and "0088098" not in e._dev_since
+
+
+def test_deviation_timer_resets_when_price_returns():
+    e, broker, fills, clock = _stale_engine(minutes_ago=30, dev=1.0, price=5600)
+    e._cancel_stale_orders(fills, clock["now"])                # 괴리 시작
+    clock["now"] += timedelta(minutes=8)
+    broker.get_price.return_value = 5700                       # 괴리 0.2% → 해소
+    e._cancel_stale_orders(fills, clock["now"])
+    assert "0088098" not in e._dev_since
+    broker.get_price.return_value = 5600                       # 다시 괴리 → 0분부터
+    clock["now"] += timedelta(minutes=9)
+    e._cancel_stale_orders(fills, clock["now"])
+    clock["now"] += timedelta(minutes=9)
+    e._cancel_stale_orders(fills, clock["now"])                # 9분 → 아직
     assert not broker.cancel.called
 
 
 def test_cancel_disabled_when_zero_or_dry_run():
-    e, broker, fills, now = _stale_engine(minutes_ago=30, limit=0)
-    e._cancel_stale_orders(fills, now)
+    e, broker, fills, clock = _stale_engine(minutes_ago=30, limit=0)
+    e._cancel_stale_orders(fills, clock["now"])
     assert not broker.cancel.called
-    e2, broker2, fills2, now2 = _stale_engine(minutes_ago=30)
+    e2, broker2, fills2, clock2 = _stale_engine(minutes_ago=30, dev=0)
     e2.set_live(False, "t")
-    e2._cancel_stale_orders(fills2, now2)
+    e2._cancel_stale_orders(fills2, clock2["now"])
     assert not broker2.cancel.called
 
 
 def test_fully_filled_order_not_canceled():
-    e, broker, fills, now = _stale_engine(minutes_ago=30)
+    e, broker, fills, clock = _stale_engine(minutes_ago=30, dev=0)
     fills[0]["unfilled_qty"] = 0
-    e._cancel_stale_orders(fills, now)
+    e._cancel_stale_orders(fills, clock["now"])
     assert not broker.cancel.called
 
 
 def test_cancel_failure_emits_and_retries_next_tick():
     from src.broker.errors import BrokerError
-    e, broker, fills, now = _stale_engine(minutes_ago=30)
+    e, broker, fills, clock = _stale_engine(minutes_ago=30, dev=0)
     broker.cancel.side_effect = BrokerError("거부")
-    e._cancel_stale_orders(fills, now)
+    e._cancel_stale_orders(fills, clock["now"])
     assert any(c.kwargs["title"] == "미체결 취소 실패" for c in e.relay.insert_event.call_args_list)
     broker.cancel.side_effect = None
-    e._cancel_stale_orders(fills, now)
+    e._cancel_stale_orders(fills, clock["now"])
     assert broker.cancel.call_count == 2                      # 실패분은 재시도

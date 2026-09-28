@@ -59,6 +59,7 @@ class StrategyEngine:
         self._sell_done_at: dict[str, datetime] = {}  # 종목별 매도 전량체결 시각(FILL_GRACE_SEC 재매도 금지)
         self._day_pnl_at: datetime | None = None      # 당일 실현손익 마지막 조회 시각
         self._cancel_requested: set[str] = set()      # 취소 요청 보낸 주문번호(중복 취소 요청 방지)
+        self._dev_since: dict[str, datetime] = {}     # 주문번호별 "현재가-주문가 괴리 ≥ 기준" 상태 시작 시각
 
     # ── 라이브/드라이런 전환 ──────────────────────────
     def set_live(self, live: bool, reason: str = "") -> None:
@@ -324,35 +325,58 @@ class StrategyEngine:
 
     # ── 미체결 취소 ───────────────────────────────────
     def _cancel_stale_orders(self, fills: list[dict], now: datetime) -> None:
-        """접수 후 unfilled_cancel_min 분 넘게 미체결 잔량이 있는 주문(매수·매도, 추적 여부 무관)을 취소.
-        취소 뒤 다음 tick 부터 규칙이 현재가로 재평가 → 조건 맞으면 재주문. 0=안 함. (2026-09-28 사용자 설정)"""
+        """미체결 취소(2026-09-28 사용자 설정, 같은 날 업그레이드):
+        현재가가 주문가에서 `unfilled_cancel_dev_pct`% 이상 벗어난 상태가 `unfilled_cancel_min`분 이상 **지속**되면
+        취소(매수·매도 공통, 추적 여부 무관). 괴리율 0 이면 접수 후 경과시간만으로 취소. 취소 후 다음 tick 부터 재평가."""
         limit = self.params.unfilled_cancel_min
+        dev_lim = self.params.unfilled_cancel_dev_pct
         if limit <= 0 or not self.live:
             return
+        seen: set[str] = set()
         for f in fills:
-            if f.get("unfilled_qty", 0) <= 0 or f["ord_no"] in self._cancel_requested:
+            ord_no = f["ord_no"]
+            if f.get("unfilled_qty", 0) <= 0 or ord_no in self._cancel_requested:
                 continue
-            tm = f.get("order_time") or ""
-            if len(tm) < 6:
+            seen.add(ord_no)
+            # 기준 시각: 괴리율 0 → 접수 시각 / 괴리율>0 → 괴리 상태가 시작된 시각(연속 유지 중일 때만)
+            if dev_lim > 0:
+                price = self._price(f["code"])
+                op = f.get("order_price") or 0
+                if not price or not op:
+                    continue
+                dev = abs(price - op) / op * 100
+                if dev < dev_lim:
+                    self._dev_since.pop(ord_no, None)          # 괴리 해소 → 타이머 리셋
+                    continue
+                start = self._dev_since.setdefault(ord_no, now)
+                why = f"현재가 {price:,} vs 주문가 {op:,} 괴리 {dev:.1f}%(기준 {dev_lim:g}%) {((now - start).total_seconds() / 60):.0f}분 지속(기준 {limit}분)"
+            else:
+                tm = f.get("order_time") or ""
+                if len(tm) < 6:
+                    continue
+                try:
+                    start = now.replace(hour=int(tm[:2]), minute=int(tm[2:4]), second=int(tm[4:6]), microsecond=0)
+                except ValueError:
+                    continue
+                why = f"접수 후 {((now - start).total_seconds() / 60):.0f}분 경과(기준 {limit}분)"
+            if (now - start).total_seconds() / 60 < limit:
                 continue
-            try:
-                placed = now.replace(hour=int(tm[:2]), minute=int(tm[2:4]), second=int(tm[4:6]), microsecond=0)
-            except ValueError:
-                continue
-            age_min = (now - placed).total_seconds() / 60
-            if age_min < limit:
-                continue
-            o = self._open_orders.get(f["ord_no"])
-            order = Order(code=f["code"], name=(o or {}).get("name", f["code"]), side=Side.SELL if (o or {}).get("side") == "sell" else Side.BUY,
-                          qty=f["qty"], order_type=OrderType.LIMIT, broker_order_id=f["ord_no"])
+            o = self._open_orders.get(ord_no)
+            order = Order(code=f["code"], name=(o or {}).get("name", f["code"]),
+                          side=Side.SELL if (o or {}).get("side") == "sell" else Side.BUY,
+                          qty=f["qty"], order_type=OrderType.LIMIT, broker_order_id=ord_no)
             try:
                 self.broker.cancel(order)
             except BrokerError as e:
-                self._emit("error", "warn", "미체결 취소 실패", f"{order.name} ord_no={f['ord_no']}: {e}")
+                self._emit("error", "warn", "미체결 취소 실패", f"{order.name} ord_no={ord_no}: {e}")
                 continue
-            self._cancel_requested.add(f["ord_no"])
+            self._cancel_requested.add(ord_no)
+            self._dev_since.pop(ord_no, None)
             self._emit("cancel", "info", "미체결 취소",
-                       f"{order.name} 주문 {f['ord_no']} — {age_min:.0f}분 경과, 미체결 {f['unfilled_qty']}/{f['qty']}주 (기준 {limit}분)")
+                       f"{order.name} 주문 {ord_no} — {why}, 미체결 {f['unfilled_qty']}/{f['qty']}주")
+        for k in list(self._dev_since):                         # 사라진 주문의 타이머 정리
+            if k not in seen:
+                self._dev_since.pop(k, None)
 
     # ── 체결 동기화 ───────────────────────────────────
     def _sync_fills(self, fills_list: list[dict]) -> None:

@@ -292,6 +292,7 @@ class KiwoomRestBroker(BrokerAdapter):
                 "commission": to_int(r.get("tdy_trde_cmsn")), "tax": to_int(r.get("tdy_trde_tax")),
                 "status": str(r.get("ord_stt", "") or ""),   # 예: 접수/체결/확인(취소)
                 "order_time": str(r.get("ord_tm", "") or ""),  # HHMMSS (당일)
+                "order_price": to_int(r.get("ord_pric")),        # 주문가(지정가)
             })
         return out
 
