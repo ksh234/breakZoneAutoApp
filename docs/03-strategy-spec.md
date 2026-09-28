@@ -66,10 +66,13 @@
 ### 2.2 청산(매도) 규칙 (`strategy/rules.py::should_exit`)
 `(position, price, env, position_state, settings) -> ExitDecision(reason, portion)`:
 
-**X1 · 분할익절 시작** (아직 분할매도 안 한 상태, AND):
-1. `price > env_upper` (현재가가 envelope 상단 위)
-2. `pnl_pct ≥ take_profit_pct` (기본 **15%**)
+**X3 · 상한가(급등) 전량매도 — 최우선, 분할매도 여부 무관** (2026-09-28 변경):
+- 현재가 ≥ 전일종가 × (1 + `limit_up_pct`/100) (기본 29≈상한가) → **보유 전량매도**. `sell_all_on_limit_up`로 on/off. 전일종가는 **어제까지의 종가**(오늘 장중가 제외 — 2026-09-28 버그 수정).
+
+**X1 · 분할익절 시작** (아직 분할매도 안 한 상태):
+1. `pnl_pct ≥ take_profit_pct` (**평단 대비**, 기본 **15%**)
 → 보유수량의 `first_sell_portion`(기본 **50%**) 매도. `partial_sold=True`, 이후 고점 추적 시작.
+- ~~`price > env_upper`~~ 조건 **제거**(2026-09-28): 경고주는 급락 전 고가가 MA20 에 남아 상단이 상한가보다 높을 수 있음(더코디: 상단 6,342 > 상한가 5,710 → +32% 인데 미매도). Envelope 은 진입(E1)에만 사용.
 
 **X2 · 하락 전량매도** — `partial_sold` 이후:
 - `price ≤ peak_since_partial × (1 − post_sell_stop_pct)` (기본 **5%** 하락) → **잔량 전량매도**.
@@ -77,10 +80,9 @@
 
 **X2b · 2차 상승 전량매도** — `partial_sold` 이후 (2026-09-04 사용자 추가):
 - 현재가 ≥ `partial_sell_price × (1 + post_sell_gain_pct/100)` → **잔량 전량매도**. 기준은 **1차(분할) 매도가**(평단 아님). `post_sell_gain_pct`=0 이면 끔(기본). 상한가(X3)와 별개로 목표 상승률에서 확정.
-- 분할매도 후 판정 우선순위: **X3 상한가 → X2b 2차 상승 → X2 트레일링.**
+- 판정 우선순위(전체): **X3 상한가(항상) → X1 분할익절(미분할 시) → X2b 2차 상승 → X2 트레일링.**
 
-**X3 · 급등 전량매도** — `partial_sold` 이후:
-- 현재가가 전일종가 대비 **+`limit_up_pct`%**(기본 29≈상한가, 조절 가능 예 28) 이상 → **잔량 전량매도**. `sell_all_on_limit_up`로 on/off.
+**X3 · 급등 전량매도** — (위로 이동, 분할 여부 무관 최우선. 2026-09-28)
 
 **X4 · 강제** (최우선): kill-switch(앱/서버 트리거) → 전량 시장가 청산.
 

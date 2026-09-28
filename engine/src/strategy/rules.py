@@ -104,22 +104,29 @@ def should_exit(
     env: Optional[Envelope], params: StrategyParams, state: PositionState,
     at_limit_up: bool = False,
 ) -> ExitDecision:
-    """매도 판정. 분할익절(X1) 시작 → 이후 트레일링(X2)/상한가(X3) 전량."""
+    """매도 판정. 상한가(X3, 최우선·분할 무관) → 분할익절(X1) → 이후 2차상승(X2b)/트레일링(X2) 전량.
+
+    2026-09-28 변경(사용자): ① X3 상한가 전량매도는 분할매도 여부와 무관하게 최우선.
+    ② X1 분할익절은 envelope 상단 조건 없이 평단 대비 +take_profit_pct 만으로(경고주는 MA20 상단이 상한가보다 높을 수 있음).
+    env 인자는 호환용으로 유지(청산에선 미사용).
+    """
     if qty <= 0 or not price or price <= 0:
         return ExitDecision(False, note="시세/수량 없음")
     pnl_pct = (price / avg_price - 1) * 100 if avg_price else 0.0
 
-    if not state.partial_sold:
-        # X1 · 분할익절 시작
-        if env is not None and price > env.upper and pnl_pct >= params.take_profit_pct:
-            sell_qty = max(1, int(qty * params.first_sell_portion))
-            return ExitDecision(True, sell_qty, "take_profit_partial", mark_partial_sold=True,
-                                note=f"+{pnl_pct:.1f}% & env상단 돌파")
-        return ExitDecision(False, note="익절 조건 미충족")
-
-    # 분할매도 이후: 잔량 전량 청산 트리거 (우선순위: 상한가 → 2차 상승 → 트레일링)
+    # X3 · 상한가(급등) 전량매도 — 분할매도 전/후 모두, 최우선
     if params.sell_all_on_limit_up and at_limit_up:
         return ExitDecision(True, qty, "limit_up", note="상한가 전량")
+
+    if not state.partial_sold:
+        # X1 · 분할익절 시작: 평단 대비 +take_profit_pct (envelope 조건 없음)
+        if pnl_pct >= params.take_profit_pct:
+            sell_qty = max(1, int(qty * params.first_sell_portion))
+            return ExitDecision(True, sell_qty, "take_profit_partial", mark_partial_sold=True,
+                                note=f"평단 대비 +{pnl_pct:.1f}%")
+        return ExitDecision(False, note="익절 조건 미충족")
+
+    # 분할매도 이후: 잔량 전량 청산 트리거 (우선순위: 2차 상승 → 트레일링)
     # X2b · 2차 상승 전량매도: 1차(분할) 매도가 대비 +post_sell_gain_pct% 도달 (0=끔)
     if params.post_sell_gain_pct > 0 and state.partial_sell_price > 0:
         target = round(state.partial_sell_price * (1 + params.post_sell_gain_pct / 100))  # 원 단위(부동소수 오차 방지)

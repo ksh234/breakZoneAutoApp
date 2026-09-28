@@ -180,7 +180,9 @@ class StrategyEngine:
 
     def _recompute_indicators(self) -> None:
         codes = set(self.candidates) | set(self.positions)
-        end = self._now().date()
+        # 어제까지만: 오늘 날짜를 포함하면 pykrx 가 장중 현재가를 오늘 '종가'로 돌려줘
+        # prev_close=오늘가 → 상한가 판정 불가, envelope 에도 오늘가 혼입 (2026-09-28 버그 수정)
+        end = self._now().date() - timedelta(days=1)
         start = end - timedelta(days=self.params.env_period * 3 + 20)
         for code in codes:
             try:

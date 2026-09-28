@@ -239,3 +239,16 @@ def test_heartbeat_pushes_balance_fields():
     kw = e.relay.push_bot_state.call_args.kwargs
     assert kw["equity"] == 49_982_188 and kw["cash"] == 37_987_660
     assert kw["stock_value"] == 12_060_860 and kw["deposit"] == 50_000_000 and kw["unrealized_pnl"] == -17_812
+
+
+def test_recompute_indicators_uses_closes_through_yesterday():
+    """2026-09-28: 과거종가 조회 end = 어제. 오늘 포함 시 prev_close 가 장중가로 잡혀 상한가 판정 불가."""
+    from datetime import date
+    e = _engine(_broker())
+    e.candidates = {}; e.positions = {"224060": Position(code="224060", name="더코디", qty=1, avg_price=4307, current_price=5710)}
+    with patch("src.strategy.engine.pykrx_fetcher.get_close_range", return_value=[4000] * 19 + [4395]) as g:
+        e._recompute_indicators()
+    _, start, end = g.call_args.args
+    assert end == date(2026, 9, 1) and start < end          # NOW=9/2 → end=9/1
+    assert e.prev_close["224060"] == 4395
+    assert e._at_limit_up("224060", 5710)                   # 4395*1.29=5669.6 ≤ 5710

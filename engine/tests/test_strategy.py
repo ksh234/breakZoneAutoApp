@@ -231,10 +231,27 @@ class TestShouldExit:
                         params=_params(), state=PositionState("x"))
         assert not d.exit   # +8% < 15
 
-    def test_no_take_profit_below_upper(self):
+    def test_take_profit_ignores_envelope_upper(self):
+        """2026-09-28: 경고주는 MA20 상단이 상한가보다 높을 수 있어 envelope 조건 제거 — +15% 만으로 분할익절."""
         d = should_exit(qty=100, avg_price=8000, price=10900, env=self._env(),
                         params=_params(), state=PositionState("x"))
-        assert not d.exit   # pnl +36% 이지만 price 10900 < upper 11000
+        assert d.exit and d.reason == "take_profit_partial" and d.qty == 50   # 10900 < upper 11000 이어도 매도
+        d2 = should_exit(qty=100, avg_price=8000, price=10900, env=None,
+                         params=_params(), state=PositionState("x"))
+        assert d2.exit                                                        # env 없어도 동작
+
+    def test_limit_up_sells_all_before_partial(self):
+        """2026-09-28: 상한가는 분할매도 여부와 무관하게 전량 최우선 (더코디 +32% 상한가 미매도 사례)."""
+        st = PositionState("224060", entries_done=4, invested_krw=11_991_200)
+        d = should_exit(qty=2779, avg_price=4307, price=5710, env=Envelope(ma=5765, upper=6342, lower=5189),
+                        params=_params(), state=st, at_limit_up=True)
+        assert d.exit and d.reason == "limit_up" and d.qty == 2779 and not d.mark_partial_sold
+
+    def test_limit_up_off_falls_back_to_partial(self):
+        st = PositionState("x")
+        d = should_exit(qty=100, avg_price=4307, price=5710, env=None,
+                        params=_params(sell_all_on_limit_up=False), state=st, at_limit_up=True)
+        assert d.exit and d.reason == "take_profit_partial" and d.qty == 50
 
     def test_trailing_stop_after_partial(self):
         p = _params(post_sell_stop_pct=0.05)
