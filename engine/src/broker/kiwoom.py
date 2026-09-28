@@ -277,6 +277,32 @@ class KiwoomRestBroker(BrokerAdapter):
         ]
 
     # ── 계좌 ──────────────────────────────────────────
+    def get_order_fills(self) -> list[dict]:
+        """당일 주문별 체결 현황 — ka10076 체결요청(전 종목). 실측 2026-09-28."""
+        body = {"stk_cd": "", "qry_tp": "0", "sell_tp": "0", "ord_no": "", "stex_tp": "0"}
+        data, _ = self._post("/api/dostk/acnt", "ka10076", body)
+        out = []
+        for r in data.get("cntr") or first_list(data):
+            if not isinstance(r, dict):
+                continue
+            out.append({
+                "ord_no": str(r.get("ord_no", "")), "code": clean_code(r.get("stk_cd")),
+                "qty": to_int(r.get("ord_qty")), "filled_qty": to_int(r.get("cntr_qty")),
+                "unfilled_qty": to_int(r.get("oso_qty")), "filled_price": to_int(r.get("cntr_pric")),
+                "commission": to_int(r.get("tdy_trde_cmsn")), "tax": to_int(r.get("tdy_trde_tax")),
+                "status": str(r.get("ord_stt", "") or ""),   # 예: 접수/체결/확인(취소)
+            })
+        return out
+
+    def get_day_realized_pnl(self) -> Optional[int]:
+        """당일 실현손익(수수료·세금 차감) — ka10077 당일실현손익상세, stk_cd=000000 이면 계좌 전체. 실측 2026-09-28."""
+        try:
+            data, _ = self._post("/api/dostk/acnt", "ka10077", {"stk_cd": "000000"})
+            return to_int(data.get("tdy_rlzt_pl"), signed=True)
+        except Exception:
+            logger.warning("당일실현손익(ka10077) 조회 실패", exc_info=True)
+            return None
+
     def get_positions(self) -> list[Position]:
         data, _ = self._post("/api/dostk/acnt", "kt00018", {"qry_tp": "2", "dmst_stex_tp": "KRX"})
         out: list[Position] = []
@@ -303,7 +329,8 @@ class KiwoomRestBroker(BrokerAdapter):
         try:
             d2, _ = self._post("/api/dostk/acnt", "kt00001", {"qry_tp": "3"})  # 예수금상세(추정조회)
             deposit = to_int(d2.get("entr"))                   # 예수금
-            cash = to_int(d2.get("ord_alow_amt"))              # 주문가능금액(수수료·세금 예정분 차감)
+            # 현금 100% 증거금 기준 주문가능금액 — 실계좌에서 증거금률<100% 여도 미수 없이 현금 한도만(2026-09-28, 사용자 원칙)
+            cash = to_int(d2.get("100stk_ord_alow_amt")) or to_int(d2.get("ord_alow_amt"))
         except Exception:
             logger.warning("예수금상세(kt00001) 조회 실패 — 주문가능금액을 총자산-주식평가로 근사", exc_info=True)
         if not cash:

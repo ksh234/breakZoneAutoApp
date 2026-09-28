@@ -57,6 +57,19 @@ class BrokerAdapter(ABC):
     def place_buy(self, code: str, qty: int, **kw) -> Order:
         return self.place_order(code, Side.BUY, qty, **kw)
 
+    # ── 선택 메서드(브로커가 지원하면 override). 실데이터 원칙(D-016): 체결·실현손익은 브로커 값 ──
+    def get_unfilled_orders(self) -> list[dict]:
+        """미체결 주문 [{ord_no, code, unfilled_qty}]"""
+        return []
+
+    def get_order_fills(self) -> list[dict]:
+        """당일 주문별 체결 [{ord_no, code, qty, filled_qty, unfilled_qty, filled_price, commission, tax, status}]"""
+        return []
+
+    def get_day_realized_pnl(self) -> Optional[int]:
+        """당일 실현손익(수수료·세금 차감, 브로커 계산). 미지원/실패 None."""
+        return None
+
     def place_sell(self, code: str, qty: int, **kw) -> Order:
         return self.place_order(code, Side.SELL, qty, **kw)
 

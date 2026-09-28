@@ -132,6 +132,36 @@ class TestAccount:
         assert bal.deposit == 50_000_000 and bal.cash == 37_987_660   # 근사(37,921,328)가 아닌 키움 값
         assert b._session.post.call_count == 2
 
+    def test_get_balance_cash_uses_100pct_margin_field(self):
+        """미수 금지: 주문가능금액은 현금 100% 증거금 기준 필드(100stk_ord_alow_amt) 우선."""
+        b = _broker()
+        b._session.post.side_effect = [
+            _resp({"return_code": 0, "prsm_dpst_aset_amt": "50,000,000", "tot_evlt_amt": "0", "tot_evlt_pl": "0"}),
+            _resp({"return_code": 0, "entr": "50,000,000", "ord_alow_amt": "189,938,300",   # 20% 증거금 계좌 가정
+                   "100stk_ord_alow_amt": "37,987,660"}),
+        ]
+        assert b.get_balance().cash == 37_987_660
+
+    def test_get_order_fills_maps_ka10076(self):
+        b = _broker()
+        b._session.post.return_value = _resp({"return_code": 0, "cntr": [
+            {"ord_no": "0088098", "stk_cd": "224060", "ord_qty": "2779", "cntr_qty": "516", "oso_qty": "2263",
+             "cntr_pric": "5710", "tdy_trde_cmsn": "10000", "tdy_trde_tax": "5000", "ord_stt": "체결"}]})
+        f = b.get_order_fills()[0]
+        assert f["ord_no"] == "0088098" and f["code"] == "224060" and f["qty"] == 2779
+        assert f["filled_qty"] == 516 and f["unfilled_qty"] == 2263 and f["filled_price"] == 5710
+        assert f["commission"] == 10000 and f["tax"] == 5000 and f["status"] == "체결"
+        assert b._session.post.call_args.kwargs.get("headers", {}).get("api-id", "ka10076") == "ka10076"
+
+    def test_get_day_realized_pnl_ka10077_account_total(self):
+        b = _broker()
+        b._session.post.return_value = _resp({"return_code": 0, "tdy_rlzt_pl": "3768526"})
+        assert b.get_day_realized_pnl() == 3_768_526
+        body = b._session.post.call_args.kwargs.get("json") or b._session.post.call_args[1].get("json")
+        assert body["stk_cd"] == "000000"
+        b._session.post.return_value = _resp({"return_code": 3, "return_msg": "err"})
+        assert b.get_day_realized_pnl() is None
+
     def test_get_balance_falls_back_when_deposit_query_fails(self):
         b = _broker()
         b._session.post.side_effect = [

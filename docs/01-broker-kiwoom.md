@@ -28,6 +28,8 @@
 | 매도 TR | `kt10001`, path/body 매수와 동일 | | ✅ |
 | 취소 TR | `kt10003`, path `/api/dostk/ordr`, body `{"dmst_stex_tp":"KRX","orig_ord_no"(7자리),"stk_cd","cncl_qty"("0"=잔량전부)}` | | ✅ |
 | 정정 TR | `kt10002` (패턴상 — MVP 미사용, 취소+재주문으로 대체) | | ⬜ |
+| 체결 조회 TR | `ka10076` (체결요청), path `/api/dostk/acnt`, body `{"stk_cd":""(전체),"qry_tp":"0","sell_tp":"0","ord_no":"","stex_tp":"0"}`. 응답 `cntr[]`: `ord_no,stk_cd,ord_qty,cntr_qty,oso_qty,cntr_pric,tdy_trde_cmsn,tdy_trde_tax,ord_stt`. 2026-09-28 실측 | | ✅ |
+| 당일실현손익 TR | `ka10077` (당일실현손익상세), body `{"stk_cd":"000000"}`=계좌 전체(빈값 불가). 응답 `tdy_rlzt_pl`(수수료·세금 차감). 2026-09-28 실측 | | ✅ |
 | 미체결 조회 TR | `ka10075`, path `/api/dostk/acnt`, body `{"all_stk_tp","trde_tp","stex_tp","stk_cd"}`. 응답 `ord_no,oso_qty`(미체결수량)`,stk_cd` | | ✅ |
 | 실시간 WebSocket | URL `wss://mockapi.kiwoom.com:10000/api/dostk/websocket`. LOGIN `{"trnm":"LOGIN","token":<access_token>}`(성공 `return_code==0`). PING 수신 시 **받은 프레임 그대로 echo**. 등록 `{"trnm":"REG","grp_no":"1","refresh":"1","data":[{"item":[codes],"type":["0B"]}]}`. 수신 `trnm:"REAL"` → `data[].{type,item,values}`, 체결타입 `"0B"`, 현재가 `values["10"]`·체결시간 `values["20"]` | | ✅ |
 | 동시구독 한도 | `______` (Phase 2 라이브 실측 — 우선 watchlist 상한 관리) | | ⬜ |

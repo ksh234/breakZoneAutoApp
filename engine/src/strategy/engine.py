@@ -28,6 +28,7 @@ KST = timezone(timedelta(hours=9))
 BUY_GRACE_SEC = 600  # 매수 주문 후 이 시간 동안은 잔고에 안 보여도 전략상태를 지우지 않음(체결 지연·잔고 반영 지연)
 FILL_GRACE_SEC = 30  # 매도 전량체결 직후 잔고 반영 지연 동안 같은 종목 재매도 금지(중복 매도 방지)
 PARAMS_RELOAD_SEC = 30  # settings 주기 재로드(앱 set_param 명령 유실·대시보드 직접 수정 대비 안전망)
+DAY_PNL_REFRESH_SEC = 30  # 당일 실현손익(브로커 ka10077) 재조회 주기
 
 
 class StrategyEngine:
@@ -56,6 +57,7 @@ class StrategyEngine:
         # 매 tick 미체결 조회로 체결수량을 갱신해 orders 테이블·실현손익에 반영. 재시작 시 추적 소실(문서화).
         self._open_orders: dict[str, dict] = {}
         self._sell_done_at: dict[str, datetime] = {}  # 종목별 매도 전량체결 시각(FILL_GRACE_SEC 재매도 금지)
+        self._day_pnl_at: datetime | None = None      # 당일 실현손익 마지막 조회 시각
 
     # ── 라이브/드라이런 전환 ──────────────────────────
     def set_live(self, live: bool, reason: str = "") -> None:
@@ -312,34 +314,45 @@ class StrategyEngine:
 
     # ── 체결 동기화 ───────────────────────────────────
     def _sync_fills(self, unfilled: list[dict]) -> None:
-        """추적 중인 주문의 체결수량을 미체결 조회로 갱신 → orders 갱신 + 매도 실현손익(체결분만) 반영.
-        미체결 목록에 없으면 전량체결로 간주(당일 만료 취소는 _maybe_daily_reset 에서 처리)."""
+        """추적 중인 주문의 체결을 **브로커 체결 조회(ka10076) 실데이터**로 갱신 → orders(filled_qty/filled_price/status).
+        실현손익은 여기서 계산하지 않음(브로커 당일실현손익을 하트비트에서 조회, D-016). unfilled 는 조회 실패 시 폴백."""
         if not self._open_orders:
             return
-        left = {u.get("ord_no"): u.get("unfilled_qty", 0) for u in unfilled}
+        try:
+            fills = {f["ord_no"]: f for f in self.broker.get_order_fills()}
+        except Exception:
+            logger.exception("체결 조회 실패 — 이번 tick 건너뜀")
+            return
         for ord_no, o in list(self._open_orders.items()):
-            filled = o["qty"] - left.get(ord_no, 0)
-            delta = filled - o["filled"]
-            if delta <= 0:
+            f = fills.get(ord_no)
+            if not f:
+                continue
+            filled = f["filled_qty"]
+            canceled = ("취소" in f.get("status", "")) or ("확인" in f.get("status", ""))
+            done = (not canceled) and (filled >= o["qty"] or (f["unfilled_qty"] == 0 and filled > 0))
+            if filled <= o["filled"] and not canceled:
                 continue
             o["filled"] = filled
-            done = filled >= o["qty"]
-            if o["side"] == "sell" and o["avg_price"]:
-                self.day_realized_pnl += (o["price"] - o["avg_price"]) * delta
+            fields = {"filled_qty": filled, "status": "filled" if done else ("canceled" if canceled else "partial")}
+            if f.get("filled_price"):
+                fields["filled_price"] = f["filled_price"]
+            if done:
+                fields["filled_at"] = self._now().isoformat()
             try:
-                self.relay.update_order(o["db_id"], filled_qty=filled, filled_price=o["price"],
-                                        status="filled" if done else "partial",
-                                        **({"filled_at": self._now().isoformat()} if done else {}))
+                self.relay.update_order(o["db_id"], **fields)
             except Exception:
                 logger.exception("order 체결 갱신 실패 %s", ord_no)
-            if done:
+            if done or canceled:
                 self._open_orders.pop(ord_no, None)
-                if o["side"] == "sell":
+                if o["side"] == "sell" and filled > 0:
                     self._sell_done_at[o["code"]] = self._now()
                 side = "매도" if o["side"] == "sell" else "매수"
-                extra = (f" (실현 {(o['price'] - o['avg_price']) * o['qty']:,})"
-                         if o["side"] == "sell" and o["avg_price"] else "")
-                self._emit("fill", "info", f"{side} 체결 완료", f"{o['name']} {o['qty']}주 @ {o['price']:,}{extra}")
+                if done:
+                    self._emit("fill", "info", f"{side} 체결 완료",
+                               f"{o['name']} {filled}주 @ {f.get('filled_price') or o['price']:,} "
+                               f"(수수료 {f.get('commission', 0):,} 세금 {f.get('tax', 0):,})")
+                else:
+                    self._emit("fill", "warn", f"{side} 주문 취소/만료", f"{o['name']} 체결 {filled}/{o['qty']}주")
             else:
                 logger.info("부분체결 %s %s %d/%d", o["name"], o["side"], filled, o["qty"])
 
@@ -472,10 +485,8 @@ class StrategyEngine:
         if d.mark_partial_sold:
             st.on_partial_sell(price)
             self._persist_state(pos.code)
-        expected = (price - pos.avg_price) * d.qty   # 실현손익은 체결분만 _sync_fills 에서 반영
         self._record_order(order, avg_price=pos.avg_price)
-        self._emit("exit", "info", "매도 접수",
-                   f"{pos.name} {d.reason} {d.qty}주 @ {price:,} (전량 체결 시 실현 {expected:,})")
+        self._emit("exit", "info", "매도 접수", f"{pos.name} {d.reason} {d.qty}주 @ {price:,}")
 
     def kill(self) -> None:
         if not self.live:
@@ -547,7 +558,21 @@ class StrategyEngine:
                 "qty": order.qty, "price": price, "avg_price": avg_price or 0, "filled": 0,
                 "reason": order.reason}
 
+    def _refresh_day_pnl(self) -> None:
+        """당일 실현손익 = 브로커 값(수수료·세금 차감, D-016). DAY_PNL_REFRESH_SEC 마다. 실패 시 이전 값 유지."""
+        now = self._now()
+        if self._day_pnl_at and (now - self._day_pnl_at).total_seconds() < DAY_PNL_REFRESH_SEC:
+            return
+        self._day_pnl_at = now
+        try:
+            v = self.broker.get_day_realized_pnl()
+        except Exception:
+            v = None
+        if v is not None:
+            self.day_realized_pnl = v
+
     def _heartbeat(self, market: bool) -> None:
+        self._refresh_day_pnl()
         fields = {"status": self.status, "market_open": market,
                   "day_pnl": self.day_realized_pnl, "positions_cnt": len(self.positions)}
         try:

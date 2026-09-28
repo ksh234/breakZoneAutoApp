@@ -24,6 +24,8 @@ def _broker(price=9000, positions=None, cash=1_000_000):
     b.get_unfilled_orders.return_value = []
     b.get_balance.return_value = Balance(cash=cash, equity=cash, stock_value=0)
     b.cached_price.return_value = None
+    b.get_order_fills.return_value = []
+    b.get_day_realized_pnl.return_value = None
     b.place_order.return_value = Order(
         code="005930", name="삼성전자", side=Side.BUY, qty=1, order_type=OrderType.LIMIT,
         price=price, status=OrderStatus.SUBMITTED, broker_order_id="1")
