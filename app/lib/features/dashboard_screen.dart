@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../core/net_error.dart';
 import '../data/models.dart';
 import '../data/repos.dart';
 
@@ -24,15 +25,25 @@ class DashboardScreen extends ConsumerWidget {
     final orders = ref.watch(ordersProvider);
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(botStateProvider),
+      onRefresh: () async => refreshAllStreams(ref),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (bot.hasError && bot.hasValue)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Row(children: [
+                Icon(Icons.wifi_off, size: 16, color: Colors.orange),
+                SizedBox(width: 6),
+                Expanded(child: Text('네트워크 재연결 중 — 아래 값은 마지막으로 받은 값입니다',
+                    style: TextStyle(color: Colors.orange, fontSize: 12))),
+              ]),
+            ),
           bot.when(
+            skipError: true,
             data: (b) => _BotCard(b),
             loading: () => const Card(child: ListTile(title: Text('불러오는 중…'))),
-            error: (e, _) => Card(child: ListTile(
-                title: const Text('상태 조회 오류'), subtitle: Text('$e'))),
+            error: (e, _) => NetErrorView(e, compact: true, onRetry: () => refreshAllStreams(ref)),
           ),
           const SizedBox(height: 12),
           Row(children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../core/net_error.dart';
 import '../data/models.dart';
 import '../data/repos.dart';
 
@@ -22,8 +23,9 @@ class HistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final v = ref.watch(tradesProvider);
     return v.when(
+      skipError: true,
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('이력 조회 오류: $e'))),
+      error: (e, _) => NetErrorView(e, onRetry: () => ref.invalidate(tradesProvider)),
       data: (list) {
         if (list.isEmpty) return const Center(child: Text('거래 이력 없음'));
         final closed = list.where((t) => t.status == 'closed' && t.profit != null).toList();

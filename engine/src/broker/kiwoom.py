@@ -43,6 +43,18 @@ def to_int(v: Any, *, signed: bool = False) -> int:
     return -n if (signed and neg) else n
 
 
+REST_PRICE_TTL_SEC = 4.0   # WS 미연결 시 REST 현재가 캐시 유지시간(초) — tick(5초) 1회당 종목별 최대 1회 조회
+
+
+def in_trading_session(now: Optional[datetime] = None) -> bool:
+    """WS 끊김 로그 수준 판단용 거래 시간대(평일 KST 08:30~16:00). 공휴일은 고려하지 않음(로그 수준만 영향)."""
+    now = now or datetime.now(KST)
+    if now.weekday() >= 5:
+        return False
+    hm = now.hour * 100 + now.minute
+    return 830 <= hm < 1600
+
+
 def clean_code(v: Any) -> str:
     """종목코드 정규화('A005930'→'005930'). 6자리 zero-pad."""
     if not v:
@@ -108,6 +120,14 @@ class KiwoomRestBroker(BrokerAdapter):
 
         self._prices: dict[str, int] = {}
         self._lock = threading.Lock()
+        # 멈춘 가격 방지(2026-10-08): WS 가격은 "현재 연결이 살아 있고, 그 연결에서 받은 틱"일 때만 사용.
+        # 아니면 REST(ka10001) 조회 + 짧은 캐시(REST_PRICE_TTL_SEC). REST 도 실패하면 None(옛 가격으로 판정 금지).
+        self._ws_live = False
+        self._ws_login_at = 0.0                      # 현재 WS 연결 로그인 시각(monotonic)
+        self._ws_down_at: Optional[float] = None     # 끊긴 시각(복구 로그용)
+        self._tick_at: dict[str, float] = {}         # 종목별 마지막 WS 틱 시각(monotonic)
+        self._rest_prices: dict[str, tuple[int, float]] = {}
+        self._fallback_logged = False
         self._ws = None
         self._ws_thread: Optional[threading.Thread] = None
         self._ws_stop = threading.Event()
@@ -200,18 +220,39 @@ class KiwoomRestBroker(BrokerAdapter):
         time.sleep(min(0.5 * (2 ** attempt), 4.0))
 
     # ── 시세 ──────────────────────────────────────────
+    def _ws_price(self, code: str) -> Optional[int]:
+        """WS 가격 — 연결이 살아 있고 현재 연결에서 받은 틱일 때만(끊긴 동안·재접속 직후의 옛 값 배제). lock 보유 상태로 호출."""
+        if not self._ws_live or self._ws_login_at <= 0:
+            return None
+        if self._tick_at.get(code, 0.0) < self._ws_login_at:
+            return None
+        return self._prices.get(code)
+
+    def _rest_cached(self, code: str) -> Optional[int]:
+        rp = self._rest_prices.get(code)
+        if rp and time.monotonic() - rp[1] < REST_PRICE_TTL_SEC:
+            return rp[0]
+        return None
+
     def get_price(self, code: str) -> Optional[int]:
         code = clean_code(code)
         with self._lock:
-            cached = self._prices.get(code)
-        if cached:
-            return cached
+            p = self._ws_price(code) or self._rest_cached(code)
+            live = self._ws_live
+        if p:
+            return p
+        if not live and not self._fallback_logged:
+            self._fallback_logged = True
+            logger.info("실시간(WS) 미연결 — 현재가를 REST 조회로 대체(복구 시 자동 복귀)")
         try:
             data, _ = self._post("/api/dostk/stkinfo", "ka10001", {"stk_cd": code})
         except BrokerError as e:
-            logger.warning("현재가 조회 실패 %s: %s", code, e)
+            logger.warning("현재가 조회 실패 %s: %s — 이번 판정 건너뜀(옛 가격 사용 안 함)", code, e)
             return None
         price = to_int(data.get("cur_prc"))
+        if price:
+            with self._lock:
+                self._rest_prices[code] = (price, time.monotonic())
         return price or None
 
     def get_prices(self, codes: list[str]) -> dict[str, int]:
@@ -223,8 +264,14 @@ class KiwoomRestBroker(BrokerAdapter):
         return out
 
     def cached_price(self, code: str) -> Optional[int]:
+        """REST 호출 없이 '신선한' 가격만(WS 현재 연결 틱 또는 TTL 내 REST). 없으면 None."""
+        code = clean_code(code)
         with self._lock:
-            return self._prices.get(clean_code(code))
+            return self._ws_price(code) or self._rest_cached(code)
+
+    @property
+    def ws_live(self) -> bool:
+        return self._ws_live
 
     # ── 주문 ──────────────────────────────────────────
     def place_order(
@@ -384,7 +431,15 @@ class KiwoomRestBroker(BrokerAdapter):
                     if trnm == "LOGIN":
                         if msg.get("return_code", 0) != 0:
                             raise AuthError(f"WS 로그인 실패: {msg.get('return_msg')}")
-                        logger.info("WS 로그인 성공 → 실시간 등록 %s", self._ws_codes)
+                        with self._lock:
+                            self._ws_live = True
+                            self._ws_login_at = time.monotonic()
+                            down_at, self._ws_down_at = self._ws_down_at, None
+                            self._fallback_logged = False
+                        if down_at is not None:
+                            logger.info("WS 복구(%.0f초 끊김) → 실시간 등록 %d종목", time.monotonic() - down_at, len(self._ws_codes))
+                        else:
+                            logger.info("WS 로그인 성공 → 실시간 등록 %s", self._ws_codes)
                         self._send_reg()
                     elif trnm == "PING":
                         self._ws.send(raw)  # 받은 프레임 그대로 echo
@@ -396,11 +451,19 @@ class KiwoomRestBroker(BrokerAdapter):
                     pass
                 backoff = 1
             except Exception as e:
+                with self._lock:
+                    self._ws_live = False
+                    if self._ws_down_at is None:
+                        self._ws_down_at = time.monotonic()
                 if self._ws_stop.is_set():
                     break
-                logger.warning("WS 오류, %ss 후 재연결: %s", backoff, e)
+                # 장 시간 외(키움 마감·점검으로 끊기는 시간)는 정보 수준, 장중만 경고
+                logger.log(logging.WARNING if in_trading_session() else logging.INFO,
+                           "WS 끊김, %ss 후 재연결: %s", backoff, e)
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 30)
+        with self._lock:
+            self._ws_live = False
 
     def _handle_real(self, items: list) -> None:
         for item in items:
@@ -412,6 +475,7 @@ class KiwoomRestBroker(BrokerAdapter):
             if code and price:
                 with self._lock:
                     self._prices[code] = price
+                    self._tick_at[code] = time.monotonic()
                 if self._on_tick:
                     try:
                         self._on_tick(code, price)
@@ -420,6 +484,8 @@ class KiwoomRestBroker(BrokerAdapter):
 
     def close(self) -> None:
         self._ws_stop.set()
+        with self._lock:
+            self._ws_live = False
         try:
             if self._ws:
                 self._ws.close()

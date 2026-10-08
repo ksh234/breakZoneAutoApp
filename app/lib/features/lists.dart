@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../core/net_error.dart';
 import '../data/models.dart';
 import '../data/repos.dart';
 
@@ -22,9 +23,11 @@ String _dday(DateTime? d) {
 }
 
 Widget _async<T>(AsyncValue<List<T>> v, Widget Function(List<T>) build, String empty) {
+  // 이전 데이터가 있으면 일시적 오류 중에도 그대로 표시(skipError), 없을 때만 연결 대기 안내.
   return v.when(
+    skipError: true,
     loading: () => const Center(child: CircularProgressIndicator()),
-    error: (e, _) => Center(child: Text('오류: $e')),
+    error: (e, _) => NetErrorView(e),
     data: (list) => list.isEmpty
         ? Center(child: Text(empty, style: const TextStyle(color: Colors.grey)))
         : build(list),

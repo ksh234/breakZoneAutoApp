@@ -188,10 +188,49 @@ class TestAccount:
         assert p.pnl == (71000 - 70000) * 10
 
     def test_get_price_cache_first(self):
+        """WS 연결이 살아 있고 현재 연결에서 받은 틱이면 REST 없이 캐시 사용."""
         b = _broker()
-        b._prices = {"005930": 71000}
+        b._ws_live, b._ws_login_at = True, 100.0
+        b._prices = {"005930": 71000}; b._tick_at = {"005930": 150.0}
         assert b.get_price("005930") == 71000
         b._session.post.assert_not_called()
+
+    def test_get_price_ignores_ws_cache_when_disconnected(self):
+        """멈춘 가격 방지(2026-10-08): WS 끊김 → 옛 캐시 무시하고 REST, TTL 내 재사용."""
+        b = _broker()
+        b._ws_live, b._ws_login_at = False, 100.0
+        b._prices = {"005930": 71000}; b._tick_at = {"005930": 150.0}
+        b._session.post.return_value = _resp({"return_code": 0, "cur_prc": "68000"})
+        assert b.get_price("005930") == 68000
+        assert b.get_price("005930") == 68000                  # 4초 TTL 내 → REST 1회
+        assert b._session.post.call_count == 1
+        assert b.cached_price("005930") == 68000               # 신선한 REST 값
+        b._rest_prices["005930"] = (68000, 0.0)                 # TTL 만료 → 재조회
+        b._session.post.return_value = _resp({"return_code": 0, "cur_prc": "67500"})
+        assert b.get_price("005930") == 67500 and b._session.post.call_count == 2
+
+    def test_get_price_ignores_tick_from_previous_connection(self):
+        """재접속 직후 아직 새 틱이 없는 종목(거래 뜸)은 이전 연결의 값 대신 REST."""
+        b = _broker()
+        b._ws_live, b._ws_login_at = True, 200.0
+        b._prices = {"005930": 71000}; b._tick_at = {"005930": 150.0}   # 이전 연결의 틱
+        b._session.post.return_value = _resp({"return_code": 0, "cur_prc": "69000"})
+        assert b.get_price("005930") == 69000
+
+    def test_get_price_returns_none_not_stale_when_rest_fails(self):
+        b = _broker()
+        b._ws_live = False
+        b._prices = {"005930": 71000}; b._tick_at = {"005930": 1.0}
+        b._session.post.return_value = _resp({"return_code": 10, "return_msg": "점검"})
+        assert b.get_price("005930") is None                   # 옛 가격(71000) 사용 안 함
+        assert b.cached_price("005930") is None
+
+    def test_in_trading_session(self):
+        from src.broker.kiwoom import in_trading_session
+        assert in_trading_session(datetime(2026, 10, 8, 9, 40, tzinfo=KST))        # 수 09:40
+        assert not in_trading_session(datetime(2026, 10, 7, 20, 5, tzinfo=KST))    # 수 20:05
+        assert not in_trading_session(datetime(2026, 10, 8, 7, 53, tzinfo=KST))    # 07:53
+        assert not in_trading_session(datetime(2026, 10, 10, 10, 0, tzinfo=KST))   # 토요일
 
     def test_get_price_rest_fallback(self):
         b = _broker()
@@ -212,4 +251,5 @@ def test_handle_real_updates_cache_and_callback():
     b._on_tick = lambda code, price: ticks.append((code, price))
     b._handle_real([{"type": "0B", "item": "005930", "values": {"10": "+71500", "20": "0930"}}])
     assert b._prices["005930"] == 71500
+    assert b._tick_at["005930"] > 0                      # 틱 시각 기록(신선도 판단)
     assert ticks == [("005930", 71500)]

@@ -13,7 +13,7 @@
 |---|---|
 | **마지막 업데이트** | 2026-09-22 |
 | **현재 Phase** | **Phase 0~5 완료 + 폰 앱 배포 + 라이브 실증(왕복주문·제어).** 전략 정교화 완료 |
-| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **206개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
+| **코드 상태** | engine analysis/broker/relay/strategy + 테스트 **210개**. Flutter 앱 7화면 + **안드로이드 APK 폰 설치·로그인 정상**(설정반영 수정본 재설치 필요). 사용법 문서([사용법.md](사용법.md)). |
 | **다음 마일스톤** | ① 집 PC 에서 **단계 B 첫 모의매매 관찰**(장중, 새 코드) ② **클라우드 VM 생성(사용자 보류 중)** → 서버 설치·전환 → Phase 6 장기 검증 |
 | **블로커** | VM 생성 보류(사용자 "나중에"). Oracle 무료티어는 가입 시 한국 리전 미제공 상태였음(2026-09-03). 대안: 며칠 뒤 Oracle 재시도 / AWS Lightsail 서울(월 $5) / Azure 무료 12개월. |
 
@@ -50,7 +50,7 @@
 ```powershell
 # 봇
 cd D:\myWorkspace\breakZoneAutoApp\engine
-.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 206개
+.\.venv\Scripts\python.exe -m pytest -q                     # 테스트 210개
 .\.venv\Scripts\python.exe -m src.main                      # 봇 실행(장중)
 # 앱
 cd D:\myWorkspace\breakZoneAutoApp\app
@@ -86,6 +86,11 @@ cd D:\myWorkspace\breakZoneAutoApp\app
 ---
 
 ## 🗂 세션 로그 (최신 → 과거)
+
+### 세션 2026-10-08 (앱 네트워크 오류 + 봇 장시간 로그 → 멈춘 가격 방지·자동 회복)
+- **사용자 보고:** 앱에 가끔 "Failed host lookup … supabase.co" 오류 카드, 봇은 장시간 켜두면 경고 로그.
+- **진단:** 앱 = 폰 DNS 일시 실패(네트워크 전환·백그라운드 복귀), 봇/Supabase 무관. 봇 1주일 경고 = WS 끊김 21회(대부분 20:00~20:16·07:53 키움 점검, 전부 1~30초 내 재접속), ka10077 점검 응답 1회(이전 값 유지), Supabase 재시도 1회(성공). **발견한 실제 위험:** `get_price` 가 WS 캐시를 연결 상태와 무관하게 사용 → 장중 장시간 끊기면 멈춘 가격으로 판정(트레일링 매도 누락 등).
+- **수정(사용자 승인 "모두 진행"):** ① 봇 — WS 가격은 `_ws_live` + 현재 연결 로그인 이후 틱만 유효, 아니면 REST(ka10001)+4초 캐시, REST 실패 시 None(옛 가격 금지). `cached_price` 도 신선한 값만. 끊김→복구 시 "WS 복구(n초)" 로그. ② 봇 — WS 끊김 로그를 장외(평일 08:30~16:00 밖) INFO, 장중 WARNING(`in_trading_session`). ③ 앱 — `_resilient` 스트림(오류 후 2→30초 재구독, 7개 provider), `skipError` 로 이전 데이터 유지 + 대시보드 "재연결 중" 안내, `NetErrorView`(네트워크 오류는 "연결 대기 중", 재시도 버튼), 백그라운드 10초+ 복귀 시 전체 재구독, 대시보드 당겨서 새로고침=전체. 앱 1.1.1+3. 테스트 +4 → **210개**. docs/01·사용법 FAQ. **봇 재시작 + APK 재설치.**
 
 ### 세션 2026-09-28 (상한가인데 미매도 → 청산 규칙 변경 + 전일종가 버그)
 - **상황:** 봇 10:47 늦게 기동(정상 LIVE). 더코디 2,779주 평단 4,307 → 5,710(+32.6%, 당일 상한가) 인데 매도 0건.

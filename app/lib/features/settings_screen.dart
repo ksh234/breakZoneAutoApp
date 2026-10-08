@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/net_error.dart';
 import '../data/models.dart';
 import '../data/repos.dart';
 
@@ -181,9 +182,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settings = ref.watch(settingsProvider);
     return settings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('설정 조회 오류: $e', textAlign: TextAlign.center))),
+      skipError: true,
+      error: (e, _) => NetErrorView(e, onRetry: () => ref.invalidate(settingsProvider)),
       data: (s) {
         if (s != null && !_initialized) _initFrom(s);
         if (!_initialized) return const Center(child: Text('설정 없음'));
